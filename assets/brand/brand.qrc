@@ -1,0 +1,25 @@
+<RCC>
+  <qresource prefix="/brand">
+    <file>moji-nook-16.png</file>
+    <file>moji-nook-22.png</file>
+    <file>moji-nook-24.png</file>
+    <file>moji-nook-32.png</file>
+    <file>moji-nook-48.png</file>
+    <file>moji-nook-64.png</file>
+    <file>moji-nook-128.png</file>
+    <file>moji-nook-256.png</file>
+    <file>moji-nook-512.png</file>
+    <file>mark-support-16.png</file>
+    <file>mark-dominant-16.png</file>
+    <file>mark-support-24.png</file>
+    <file>mark-dominant-24.png</file>
+    <file>mark-support-32.png</file>
+    <file>mark-dominant-32.png</file>
+    <file>mark-support-48.png</file>
+    <file>mark-dominant-48.png</file>
+    <file>mark-support-64.png</file>
+    <file>mark-dominant-64.png</file>
+    <file>mark-support-128.png</file>
+    <file>mark-dominant-128.png</file>
+  </qresource>
+</RCC>

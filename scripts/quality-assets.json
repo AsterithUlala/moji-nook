@@ -1,0 +1,22 @@
+{
+  "voicevox-core.zip": {
+    "url": "https://github.com/VOICEVOX/voicevox_core/releases/download/0.17.0/voicevox_core-linux-x64-0.17.0.zip",
+    "sha256": "00a80c5688e2fde093a3e2c1a4c39170b1c86760d92638a554c8a971a9d97077"
+  },
+  "voicevox-onnxruntime.tgz": {
+    "url": "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-1.17.3/voicevox_onnxruntime-linux-x64-1.17.3.tgz",
+    "sha256": "72b5287fdd48dc833a9929f6e9e3826e793b54ce1202181be93f63823a222f58"
+  },
+  "voicevox-0.vvm": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/0.vvm",
+    "sha256": "917e592cae92a02fb7668bd9e168df4e39c8ab2f5302c2be71906c70ec4e2df2"
+  },
+  "voicevox-vvm-TERMS.txt": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/TERMS.txt",
+    "sha256": "57fc18afeebc8a08c303b2b4e3f05bf6453a37c482d17c04ec3fbc674e5fc5f4"
+  },
+  "voicevox-vvm-README.txt": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/README.txt",
+    "sha256": "12a64121db0815fc5e6ea8cdf13cd3ed052b7c7d7a170a70a2c0eced2fc63573"
+  }
+}

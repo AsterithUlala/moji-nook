@@ -1,0 +1,38 @@
+{
+  "open-jtalk.deb": {
+    "url": "https://deb.debian.org/debian/pool/main/o/open-jtalk/open-jtalk_1.11-3_amd64.deb",
+    "sha256": "e296425545d977cad48b4e5ec666636c52b11b1cb038395827886c0177194ffd"
+  },
+  "htsengine.deb": {
+    "url": "https://deb.debian.org/debian/pool/main/h/htsengine/libhtsengine1_1.10-6_amd64.deb",
+    "sha256": "a7ebed4d666ac599ed137e461c461e25a6d454898ba3fde583325fc3dfe9504a"
+  },
+  "dictionary.deb": {
+    "url": "https://deb.debian.org/debian/pool/main/o/open-jtalk/open-jtalk-mecab-naist-jdic_1.11-3_all.deb",
+    "sha256": "5c022fc8cff3548ca655f491fa2d9d013576424f7e98d6e27f03c841554f0012"
+  },
+  "mei.htsvoice": {
+    "url": "https://raw.githubusercontent.com/mmdagent-ex/example/95e3a0b389be60d5c8fd0215684f82512cb81d36/voice/mei/mei_normal.htsvoice",
+    "sha256": "f3be49a6838904a6c218790b64e07c3e83c1886e995dca284b413caab19184de"
+  },
+  "mei-COPYRIGHT.txt": {
+    "url": "https://raw.githubusercontent.com/mmdagent-ex/example/95e3a0b389be60d5c8fd0215684f82512cb81d36/voice/mei/COPYRIGHT.txt",
+    "sha256": "06fc42611289ac1224c64f765521e121b63a0d2b52cf1b04b0b33b20ea7bd6f2"
+  },
+  "takumi.htsvoice": {
+    "url": "https://raw.githubusercontent.com/rosmarinus/jtalkdll/6437128501e525230160f92a161c637641c1844d/voice/takumi/takumi_normal.htsvoice",
+    "sha256": "9130cc911c881cc2c4c442a67374d8601b436f9dd415b555fe3c2d2c94444d42"
+  },
+  "takumi-COPYRIGHT.txt": {
+    "url": "https://raw.githubusercontent.com/rosmarinus/jtalkdll/6437128501e525230160f92a161c637641c1844d/voice/takumi/COPYRIGHT.txt",
+    "sha256": "77c18fdd014af8fda6746d3075beb8559fcd260026c6bf84521e06c83a13ec67"
+  },
+  "tohoku.htsvoice": {
+    "url": "https://raw.githubusercontent.com/icn-lab/htsvoice-tohoku-f01/8e3306021db135c265f5eda5f062dc489707ddf8/tohoku-f01-neutral.htsvoice",
+    "sha256": "ded6acb4243b93cc50896199d67b00a7c487662bfcdcd3f9f30a4fb0444b0b46"
+  },
+  "tohoku-COPYRIGHT.txt": {
+    "url": "https://raw.githubusercontent.com/icn-lab/htsvoice-tohoku-f01/8e3306021db135c265f5eda5f062dc489707ddf8/COPYRIGHT.txt",
+    "sha256": "f7f7a1a696f062704825fcc495d330beeeac8c0ed38d8f5bdd8e90bdc3471c95"
+  }
+}

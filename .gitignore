@@ -1,0 +1,38 @@
+/build/
+/build-*/
+CMakeUserPresets.json
+*.user
+*.sqlite*
+token
+cache.json
+settings.ini
+app.lock
+.env
+.env.*
+!.env.example
+*.log
+*.csv
+
+# Local profiles, backups, and deck exports
+/data/
+/profiles/
+/backups/
+*.db
+*.db-*
+*.apkg
+*.colpkg
+*.anki2
+*.anki21
+*.anki21b
+
+# Local Python/desktop artifacts
+__pycache__/
+.venv/
+.DS_Store
+Thumbs.db
+
+# Package build output
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.tar.gz
+/packaging/arch/*.pkg.tar.*

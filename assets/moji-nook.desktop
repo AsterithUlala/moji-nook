@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Moji Nook
+Comment=Short Japanese practice from WaniKani or Anki
+Exec=moji-nook
+Icon=moji-nook
+Terminal=false
+Categories=Education;Languages;
+StartupWMClass=moji-nook

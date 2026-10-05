@@ -1,0 +1,36 @@
+pkgname=moji-nook
+_tag=0.1.0-alpha
+pkgver=0.1.0alpha
+pkgrel=1
+pkgdesc="A quiet WaniKani companion: short Japanese practice cards over your other windows"
+arch=('x86_64')
+url="https://github.com/AsterithUlala/moji-nook"
+license=('MIT' 'BSD-3-Clause' 'CC-BY-3.0' 'CC-BY-4.0' 'LicenseRef-VOICEVOX')
+depends=('qt6-base' 'qt6-multimedia' 'layer-shell-qt' 'hicolor-icon-theme' 'gcc-libs' 'glibc')
+makedepends=('cmake' 'ninja' 'python')
+optdepends=('noto-fonts-cjk: recommended Japanese font'
+            'noto-fonts: recommended interface font')
+options=('!debug')
+# Speech voices, Open JTalk, and VOICEVOX are downloaded and hash-verified by CMake during build().
+source=("$pkgname-$_tag.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
+# The recipe ships inside the archive it verifies, so the in-repo checksum cannot be fixed.
+sha256sums=('SKIP')
+
+build() {
+  cmake -S "$pkgname-$_tag" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
+  cmake --build build
+}
+
+check() {
+  QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$pkgname-$_tag/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  ln -s /usr/share/moji-nook/speech/licenses "$pkgdir/usr/share/licenses/$pkgname/speech"
+  ln -s /usr/share/moji-nook/speech/quality/licenses "$pkgdir/usr/share/licenses/$pkgname/speech-quality"
+}

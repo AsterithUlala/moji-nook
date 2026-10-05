@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Moji Nook · 文</title>
+  <desc>A four-stroke, weighted ink-cut 文 mark with a quiet top dot, strong horizontal, and crossing falling strokes.</desc>
+  <rect id="background" width="128" height="128" rx="28" fill="#202020"/>
+  <g id="support" fill="#bfbfbf">
+    <path d="M56 13L72 21L68 31L54 23Z"/>
+  </g>
+  <g id="dominant" fill="#f2f2f2">
+    <path d="M18 38L110 33L105 47L21 48Z"/>
+    <path d="M81 49L94 51C78 85 52 106 22 117L15 103C46 93 67 74 81 49Z"/>
+    <path d="M36 51L49 49C61 79 84 97 112 105L105 120C72 108 48 85 36 51Z"/>
+  </g>
+</svg>
