@@ -34,13 +34,34 @@ def download(path, asset):
         temporary.unlink(missing_ok=True)
 
 
+PLATFORMS = {
+    'linux': {
+        'manifest': 'quality-assets.json',
+        'core': ('voicevox-core.zip', 'voicevox_core-linux-x64-0.17.0'),
+        'runtime': ('voicevox-onnxruntime.tgz', 'voicevox_onnxruntime-linux-x64-1.17.3'),
+        'core_files': ['libvoicevox_core.so'],
+        'runtime_files': ['libvoicevox_onnxruntime.so.1.17.3'],
+    },
+    'windows': {
+        'manifest': 'quality-assets-windows.json',
+        'core': ('voicevox-core-windows.zip', 'voicevox_core-windows-x64-0.17.0'),
+        'runtime': ('voicevox-onnxruntime-windows.tgz', 'voicevox_onnxruntime-win-x64-1.17.3'),
+        'core_files': ['voicevox_core.dll', 'voicevox_core.lib'],
+        'runtime_files': ['voicevox_onnxruntime.dll'],
+    },
+}
+
+
 def main():
-    if len(sys.argv) != 2:
-        raise ValueError('Usage: setup_quality_speech.py SPEECH_BUNDLE_DIRECTORY')
+    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != '--windows'):
+        raise ValueError('Usage: setup_quality_speech.py SPEECH_BUNDLE_DIRECTORY [--windows]')
     bundle = Path(sys.argv[1]).resolve()
-    if not (bundle / 'dictionary/sys.dic').is_file():
+    windows = len(sys.argv) == 3
+    platform = PLATFORMS['windows' if windows else 'linux']
+    bundle.mkdir(parents=True, exist_ok=True)
+    if not windows and not (bundle / 'dictionary/sys.dic').is_file():
         raise ValueError('The shared Fast speech dictionary must be prepared first')
-    manifest = Path(__file__).with_name('quality-assets.json')
+    manifest = Path(__file__).with_name(platform['manifest'])
     assets = json.loads(manifest.read_text())
     downloads = bundle.parent / 'speech-downloads'
     downloads.mkdir(parents=True, exist_ok=True)
@@ -50,22 +71,30 @@ def main():
         staging = Path(temporary)
         extracted = staging / 'extracted'
         extracted.mkdir()
-        with zipfile.ZipFile(downloads / 'voicevox-core.zip') as archive:
+        with zipfile.ZipFile(downloads / platform['core'][0]) as archive:
             for entry in archive.infolist():
                 if not (extracted / entry.filename).resolve().is_relative_to(extracted.resolve()):
                     raise ValueError('Unsafe path in core archive')
             archive.extractall(extracted)
-        with tarfile.open(downloads / 'voicevox-onnxruntime.tgz') as archive:
+        with tarfile.open(downloads / platform['runtime'][0]) as archive:
             archive.extractall(extracted, filter='data')
-        core = extracted / 'voicevox_core-linux-x64-0.17.0'
-        runtime = extracted / 'voicevox_onnxruntime-linux-x64-1.17.3'
+        core = extracted / platform['core'][1]
+        runtime = extracted / platform['runtime'][1]
         quality = staging / 'quality'
         for name in ['lib', 'models', 'licenses/voicevox-core', 'licenses/voicevox-onnxruntime',
                      'licenses/voicevox-vvm']:
             (quality / name).mkdir(parents=True, exist_ok=True)
-        shutil.copy2(core / 'lib/libvoicevox_core.so', quality / 'lib/libvoicevox_core.so')
-        shutil.copy2(runtime / 'lib/libvoicevox_onnxruntime.so.1.17.3',
-                     quality / 'lib/libvoicevox_onnxruntime.so.1.17.3')
+        for name in platform['core_files']:
+            shutil.copy2(core / 'lib' / name, quality / 'lib' / name)
+        for name in platform['runtime_files']:
+            shutil.copy2(runtime / 'lib' / name, quality / 'lib' / name)
+        if windows:
+            with tarfile.open(downloads / 'open-jtalk-dictionary.tar.gz') as archive:
+                archive.extractall(extracted, filter='data')
+            dictionary = extracted / 'open_jtalk_dic_utf_8-1.11'
+            (quality / 'licenses/open-jtalk-dictionary').mkdir(parents=True)
+            shutil.copy2(dictionary / 'COPYING', quality / 'licenses/open-jtalk-dictionary/COPYING')
+            (dictionary / 'COPYING').unlink()
         shutil.copytree(core / 'include', quality / 'include')
         shutil.copy2(downloads / 'voicevox-0.vvm', quality / 'models/0.vvm')
         # Preserve every upstream top-level notice and metadata file verbatim.
@@ -85,10 +114,16 @@ def main():
             'VOICEVOX ONNX Runtime 1.17.3: see voicevox-onnxruntime/TERMS.txt and third-party-notices.html.\n'
             'VOICEVOX voice models 0.16.4: see voicevox-vvm/TERMS.txt and README.txt.\n'
             'The voice models are redistributed without modification.\n'
-            'The Japanese dictionary and its notices are shared with the Fast speech bundle.\n'
-            'Source URLs and SHA256 checksums: quality-assets.json.\n', encoding='utf-8')
-        shutil.copy2(manifest, quality / 'licenses/quality-assets.json')
-        (quality / '.complete').write_text(sha256(manifest) + '\n' + sha256(Path(__file__)) + '\n')
+            + ('Japanese dictionary: Open JTalk UTF-8 dictionary 1.11; see open-jtalk-dictionary/COPYING.\n'
+               if windows else
+               'The Japanese dictionary and its notices are shared with the Fast speech bundle.\n')
+            + 'Source URLs and SHA256 checksums: ' + manifest.name + '.\n', encoding='utf-8')
+        shutil.copy2(manifest, quality / 'licenses' / manifest.name)
+        (quality / '.complete').write_text(sha256(manifest) + '\n' + sha256(Path(__file__)) + '\n', newline='\n')
+        if windows:
+            if (bundle / 'dictionary').exists():
+                shutil.rmtree(bundle / 'dictionary')
+            dictionary.replace(bundle / 'dictionary')
         destination = bundle / 'quality'
         if destination.exists():
             shutil.rmtree(destination)

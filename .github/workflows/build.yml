@@ -1,0 +1,99 @@
+name: Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  arch:
+    name: Arch Linux package
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git cmake ninja python \
+            qt6-base qt6-multimedia layer-shell-qt hicolor-icon-theme
+      - uses: actions/checkout@v4
+      - name: Build package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          su builder -c "git config --global --add safe.directory '$GITHUB_WORKSPACE' && cd '$GITHUB_WORKSPACE/packaging/arch' && ./build-local.sh --noconfirm"
+          cd packaging/arch && sha256sum moji-nook-*.pkg.tar.zst > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moji-nook-arch
+          path: |
+            packaging/arch/moji-nook-*.pkg.tar.zst
+            packaging/arch/SHA256SUMS
+
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            foreach ($test in "anki", "speech") {
+              $log = Join-Path $env:RUNNER_TEMP "$test.txt"
+              & "build/moji_nook_${test}_tests.exe" -platform offscreen -o "$log,txt"
+              Write-Output "$test exit code: $LASTEXITCODE"
+              if (Test-Path $log) { Get-Content $log }
+            }
+            exit 1
+          }
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Bundle
+        shell: pwsh
+        run: |
+          $dist = "dist/moji-nook"
+          cmake --install build --prefix $dist
+          windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw "$dist/moji-nook.exe"
+          Copy-Item LICENSE "$dist/LICENSE.txt"
+      - name: Smoke test bundle
+        shell: pwsh
+        run: |
+          $dist = Resolve-Path "dist/moji-nook"
+          $wav = Join-Path $env:RUNNER_TEMP "quality.wav"
+          $env:PATH = "$dist\speech\quality\lib;$env:PATH"
+          $request = '{"id":1,"text":"\u306b\u307b\u3093\u3054","style":2,"rate":1.0,"path":"' + ($wav -replace '\\','/') + '"}'
+          $response = $request | & "$dist\moji-nook-quality-worker.exe" --bundle "$dist\speech"
+          Write-Output $response
+          if (-not ($response -match '"ok":true') -or (Get-Item $wav).Length -le 44) { throw "Quality speech failed" }
+          $previews = Join-Path $env:RUNNER_TEMP "previews"
+          $app = Start-Process "$dist\moji-nook.exe" -ArgumentList "--data-dir", (Join-Path $env:RUNNER_TEMP "profile"), "--preview", $previews -Wait -PassThru
+          if ($app.ExitCode -ne 0) { throw "Preview run failed with $($app.ExitCode)" }
+          Write-Output "Previews: $((Get-ChildItem $previews).Count)"
+      - name: Archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/moji-nook -DestinationPath dist/moji-nook-windows-x64.zip
+          (Get-FileHash dist/moji-nook-windows-x64.zip -Algorithm SHA256).Hash.ToLower() + "  moji-nook-windows-x64.zip" | Out-File -Encoding ascii dist/SHA256SUMS-windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moji-nook-windows-x64
+          path: |
+            dist/moji-nook-windows-x64.zip
+            dist/SHA256SUMS-windows

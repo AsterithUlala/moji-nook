@@ -1,5 +1,5 @@
 # Self-contained speech assets. Build-time downloads only; runtime is offline.
-option(MOJI_NOOK_BUNDLE_SPEECH "Bundle lightweight local Japanese pronunciation" ON)
+option(MOJI_NOOK_BUNDLE_SPEECH "Bundle offline Japanese pronunciation" ON)
 if(MOJI_NOOK_BUNDLE_SPEECH AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
   set(MOJI_NOOK_SPEECH_BUNDLE "${CMAKE_BINARY_DIR}/speech")
   file(SHA256 "${CMAKE_SOURCE_DIR}/scripts/speech-assets.json" speech_manifest_sha)
@@ -36,8 +36,11 @@ if(MOJI_NOOK_BUNDLE_SPEECH AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYST
     endif()
   endif()
   # Quality has its own install rule; stale assets must not leak into Fast-only packages.
-  install(DIRECTORY "${MOJI_NOOK_SPEECH_BUNDLE}/" DESTINATION share/moji-nook/speech
+  install(DIRECTORY "${MOJI_NOOK_SPEECH_BUNDLE}/" DESTINATION ${MOJI_NOOK_SPEECH_INSTALL_DIR}
           USE_SOURCE_PERMISSIONS PATTERN "quality" EXCLUDE)
+elseif(MOJI_NOOK_BUNDLE_SPEECH AND WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+  # Windows has no Open JTalk build; the Quality setup provides the dictionary.
+  set(MOJI_NOOK_SPEECH_BUNDLE "${CMAKE_BINARY_DIR}/speech")
 else()
   message(STATUS "Bundled Japanese pronunciation is available for Linux x86_64 builds")
 endif()
