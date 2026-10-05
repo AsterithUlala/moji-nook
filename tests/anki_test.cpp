@@ -192,7 +192,8 @@ private slots:
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write("test");
     file.close();
-    QCOMPARE(ankiMediaPath(dir.path(), "test.mp3"), file.fileName());
+    QCOMPARE(ankiMediaPath(dir.path(), "test.mp3"),
+             QFileInfo(file).canonicalFilePath());
     QFile playlist(dir.filePath("test.m3u"));
     QVERIFY(playlist.open(QIODevice::WriteOnly));
     playlist.close();

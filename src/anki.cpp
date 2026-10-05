@@ -77,7 +77,7 @@ QString ankiMediaPath(const QString &directory, const QString &filename) {
     return {};
   const QString path = file.canonicalFilePath();
   if (root.isEmpty() || !file.isFile() || file.size() > 16 * 1024 * 1024 ||
-      !path.startsWith(root + QDir::separator()))
+      !path.startsWith(root + '/'))  // Qt paths always use '/'
     return {};
   return path;
 }
