@@ -79,8 +79,8 @@ AnkiConnect add-on. Support is more limited than WaniKani. See the [Anki setup a
 ## Get started
 
 Moji Nook is an early alpha. It is tested on Linux x86_64 with KDE Plasma on
-Wayland (Arch/CachyOS). Other desktops may work but are untested; Windows and
-macOS are not supported yet.
+Wayland (Arch/CachyOS). Other desktops may work but are untested; macOS is not
+supported yet.
 
 **Arch Linux and derivatives:** download the `.pkg.tar.zst` package from the
 [latest release](https://github.com/AsterithUlala/moji-nook/releases) and install it:
@@ -89,6 +89,11 @@ macOS are not supported yet.
 sudo pacman -U moji-nook-*.pkg.tar.zst
 moji-nook --demo   # try sample words, no account needed
 ```
+
+**Windows (experimental):** download `moji-nook-windows-x64.zip` from the
+[latest release](https://github.com/AsterithUlala/moji-nook/releases), extract
+it anywhere, and run `moji-nook.exe`. Japanese pronunciation is not included on
+Windows yet. See [Windows](docs/INSTALL.md#windows-experimental) for details.
 
 **Other distributions:** build from source.
 

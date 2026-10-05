@@ -44,10 +44,10 @@ Linux builds require LayerShellQt. Bundled Japanese speech is currently prepared
 only for Linux x86_64. On other architectures, build without bundled speech and
 treat the port as unvalidated.
 
-Windows has always-on-top support in the source and excludes LayerShellQt, but
-compilation, runtime behavior, and packaging have not been validated. macOS has
-no validated build or overlay behavior. These platforms are development targets,
-not supported installer options today.
+Windows x64 builds compile and pass the test suite in CI, and a portable zip is
+published with each release (see [Windows](#windows-experimental)). Desktop
+behavior on Windows has not had a hands-on release pass. macOS has no validated
+build or overlay behavior and is a development target only.
 
 ## Requirements
 
@@ -194,10 +194,36 @@ settings, the output device, and the system mixer. Voice and feedback-tone volum
 are separate. For an installed build, verify that its speech helper and asset
 directories were installed too. Missing audio does not prevent practice.
 
-## Windows development builds
+## Windows (experimental)
 
-Install Qt 6.5+ with the components listed above, CMake, Ninja, and a supported
-C++ compiler. Configure without both speech bundles. Qt's `windeployqt` can
-collect runtime dependencies, including the SQLite and Multimedia plugins,
-but this repository has no tested Windows distribution procedure. Native speech
-bundles, fullscreen behavior, and credential storage need a Windows release pass.
+Each `v*` release tag runs [`.github/workflows/windows.yml`](../.github/workflows/windows.yml),
+which builds with MSVC and Qt 6.8, runs the test suite, and attaches
+`moji-nook-windows-x64.zip` to the release. Every push also uploads the same
+folder as a workflow artifact, so you can try a build from the Actions tab.
+
+The zip is portable: extract it anywhere and run `moji-nook.exe`. It bundles Qt
+and the MSVC runtime, so nothing else needs to be installed. Practice data lives
+in `%LOCALAPPDATA%\MojiNook\Moji Nook`. To remove Moji Nook, quit it from the
+tray and delete the extracted folder.
+
+Known limits:
+
+- **No Japanese pronunciation yet.** The Fast and Quality speech bundles are
+  prepared for Linux only. Anki deck recordings can still play.
+- **Overlay behavior is untested by hand.** Cards use a topmost window that
+  should not take focus, but fullscreen games and exclusive-fullscreen apps
+  may cover it.
+- **Unsigned.** Windows SmartScreen may warn on first launch; choose
+  **More info → Run anyway**.
+- **Token storage.** The WaniKani token is a plaintext file in your profile
+  directory, protected by your account's application-data permissions rather
+  than Windows Credential Manager. See [storage](USAGE.md#storage-backups-and-privacy).
+
+To build locally, install Qt 6.5+ (with Multimedia), CMake, Ninja, and Visual
+Studio's C++ tools, then from a *Developer PowerShell*:
+
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUNDLE_SPEECH=OFF
+cmake --build build
+windeployqt --release build\moji-nook.exe
+```
