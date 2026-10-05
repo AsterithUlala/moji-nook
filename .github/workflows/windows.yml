@@ -51,7 +51,12 @@ jobs:
           Copy-Item build/moji-nook.exe $out
           windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw "$out/moji-nook.exe"
           # Ship the MSVC runtime so users do not need the VC++ redistributable.
-          Copy-Item "$env:VCToolsRedistDir/x64/Microsoft.VC143.CRT/*.dll" $out
+          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64/Microsoft.VC*.CRT/*.dll"
+          if (-not $crt) { throw "MSVC runtime DLLs not found under $env:VCToolsRedistDir" }
+          $crt | Copy-Item -Destination $out
+          Remove-Item "$out/vc_redist.x64.exe" -ErrorAction Ignore
+          # Only SQLite is used; the other drivers need client libraries we do not ship.
+          Get-ChildItem "$out/sqldrivers" -Exclude qsqlite.dll | Remove-Item
           Copy-Item LICENSE "$out/LICENSE.txt"
           Copy-Item README.md "$out/README.md"
           Compress-Archive -Path $out -DestinationPath dist/moji-nook-windows-x64.zip
