@@ -17,6 +17,7 @@ class PracticeClock : public QObject {
 public:
   explicit PracticeClock(QObject *parent = nullptr);
   QTimer timer;
+  static constexpr int maxSessionSize = 25;
   int intervalMs = 300000;
   int sessionSize = 2, sessionTotal = 2, position = 1;
   QString sessionId;
@@ -145,10 +146,14 @@ private:
   WordTileCanvas *homeTiles;
   void refreshHomeState();
   void snoozePractice();
+  void refreshSnoozeLabels();
+  int snoozeMinutes = 30;
+  QAction *snoozeAction = nullptr;
   QDateTime lastSyncAt, lastAutoAttempt;
   QLineEdit *tokenInput;
   QSpinBox *interval;
   QSpinBox *sessionCount;
+  QSpinBox *snoozeLength;
   QSlider *newestPercent, *recentPercent, *persistentPercent, *recallPercent,
       *typedPercent;
   QComboBox *corner, *monitor, *theme, *practiceSource;

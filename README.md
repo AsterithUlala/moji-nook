@@ -8,7 +8,7 @@ It reinforces the kanji and vocabulary you have already learned in WaniKani,
 fitting extra practice into the gaps in your day without stealing focus, and it
 never changes your WaniKani progress.
 
-> **Early alpha (0.1.0).** Expect rough edges. Tested on Linux x86_64 with KDE
+> **Early alpha (0.1.2).** Expect rough edges. Tested on Linux x86_64 with KDE
 > Plasma on Wayland. See [Get started](#get-started) and please
 > [report problems](https://github.com/AsterithUlala/moji-nook/issues).
 
@@ -36,14 +36,15 @@ Nook itself waits in the system tray.*
 
 ## How it fits into your day
 
-- **Short bursts:** two cards per session by default; choose one to five.
+- **Short bursts:** two cards per session by default; choose anywhere from one
+  to 25.
 - **Your timing:** a session is offered every five minutes by default, and you
   can change the interval. The next interval starts when you finish or end a session.
 - **A quiet overlay:** choose the display and corner. Cards appear without taking
   keyboard focus from your current app; click when you are ready to answer.
 - **Easy to put aside:** dismiss a session, pause reminders, or snooze for
-  30 minutes. Busy time never builds a backlog, and a dismissed card is not
-  counted as a wrong answer.
+  your chosen time (30 minutes by default). Busy time never builds a backlog,
+  and a dismissed card is not counted as a wrong answer.
 - **On demand:** start a session any time from the system tray.
 
 Moji Nook runs in the system tray. Closing the dashboard leaves it running; use

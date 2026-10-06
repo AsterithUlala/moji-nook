@@ -17,13 +17,16 @@ JapaneseSpeech::~JapaneseSpeech() {
       running->waitForFinished(1000);
 }
 QStringList JapaneseSpeech::voices(const QString &engine) {
-  return engine == "quality" ? QStringList{"metan", "zundamon", "tsumugi"}
-                             : QStringList{"mei", "takumi", "tohoku"};
+  if (engine != "quality")
+    return {"mei", "takumi", "tohoku"};
+  QStringList ids;
+  for (const auto &voice : qualityVoices)
+    ids << voice.id;
+  return ids;
 }
 QString JapaneseSpeech::voiceName(const QString &id) {
-  if (id == "metan") return "Metan";
-  if (id == "zundamon") return "Zundamon";
-  if (id == "tsumugi") return "Tsumugi";
+  if (const auto *voice = qualityVoice(id))
+    return QString::fromUtf8(voice->name);
   return id == "mei" ? "Mei" : id == "takumi" ? "Takumi"
                             : id == "tohoku" ? "Tohoku" : "Random voice";
 }
@@ -54,11 +57,14 @@ bool JapaneseSpeech::available(const QString &engine) const {
   const auto dir = bundleDirectory();
   if (dir.isEmpty() || !QFileInfo::exists(dir + "/dictionary/sys.dic"))
     return false;
-  if (selected == "quality")
+  if (selected == "quality") {
+    for (const auto &voice : qualityVoices)
+      if (!QFileInfo::exists(dir + "/quality/models/" + voice.model))
+        return false;
     return !qualityWorkerPath().isEmpty() &&
-        QFileInfo::exists(dir + "/quality/models/0.vvm") &&
         QFileInfo::exists(dir + "/" + voicevoxCoreLibrary()) &&
         QFileInfo::exists(dir + "/" + voicevoxRuntimeLibrary());
+  }
   if (!QFileInfo(dir + "/bin/open_jtalk").isExecutable())
     return false;
   for (const auto &voice : voices("fast"))
@@ -359,7 +365,7 @@ void JapaneseSpeech::synthesizeQuality(const QString &text, const QString &voice
   worker->setProperty("wavePath", path);
   worker->setProperty("cacheKey", key);
   worker->setProperty("voice", voice);
-  const int style = voice == "metan" ? 2 : voice == "zundamon" ? 3 : 8;
+  const int style = qualityVoice(voice) ? qualityVoice(voice)->style : qualityVoices[0].style;
   const auto payload = QJsonDocument(QJsonObject{{"id", requestEpoch}, {"text", text},
       {"style", style}, {"rate", rate}, {"path", path}}).toJson(QJsonDocument::Compact) + '\n';
   worker->setProperty("payload", payload);

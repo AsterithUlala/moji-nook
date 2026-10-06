@@ -260,7 +260,7 @@ void App::buildDashboard() {
   });
   sessionCount = new ScrollSafeSpinBox;
   sessionCount->setObjectName("sessionCount");
-  sessionCount->setRange(1, 5);
+  sessionCount->setRange(1, PracticeClock::maxSessionSize);
   sessionCount->setValue(clock.sessionSize);
   sessionCount->setSuffix(" cards per session");
   sessionCount->setAccessibleName("Cards per session");
@@ -271,6 +271,21 @@ void App::buildDashboard() {
   connect(sessionCount, &QSpinBox::valueChanged, this, [this](int n) {
     clock.sessionSize = n;
     settings.setValue("session_count", n);
+  });
+  snoozeLength = new ScrollSafeSpinBox;
+  snoozeLength->setObjectName("snoozeMinutes");
+  snoozeLength->setRange(1, 240);
+  snoozeLength->setValue(snoozeMinutes);
+  snoozeLength->setSuffix(" minutes");
+  snoozeLength->setAccessibleName("Snooze length in minutes");
+  auto *snoozeLabel = label("Snooze length", "muted");
+  snoozeLabel->setBuddy(snoozeLength);
+  form->addWidget(snoozeLabel);
+  form->addWidget(snoozeLength);
+  connect(snoozeLength, &QSpinBox::valueChanged, this, [this](int n) {
+    snoozeMinutes = n;
+    settings.setValue("snooze_minutes", n);
+    refreshSnoozeLabels();
   });
   auto *placement = new QFrame;
   placement->setObjectName("placementSettings");
@@ -750,7 +765,7 @@ void App::buildDashboard() {
     refreshHomeState();
   });
   sessionLayout->addWidget(pause);
-  auto *snooze = button("Snooze 30 minutes", "control");
+  auto *snooze = button(QString("Snooze %1 minutes").arg(snoozeMinutes), "control");
   snooze->setObjectName("homeSnooze");
   connect(snooze, &QPushButton::clicked, this, &App::snoozePractice);
   sessionLayout->addWidget(snooze);

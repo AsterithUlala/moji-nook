@@ -33,7 +33,7 @@ if(MOJI_NOOK_BUNDLE_QUALITY_SPEECH AND quality_speech_supported)
     set(quality_bundle_valid FALSE)
   endif()
   foreach(quality_file ${quality_platform_files}
-          models/0.vvm include/voicevox_core.h
+          models/4.vvm models/9.vvm models/21.vvm include/voicevox_core.h
           licenses/voicevox-core/LICENSE licenses/voicevox-core/README.txt licenses/voicevox-core/VERSION
           licenses/voicevox-onnxruntime/TERMS.txt licenses/voicevox-onnxruntime/third-party-notices.html
           licenses/voicevox-onnxruntime/VERSION_NUMBER licenses/voicevox-onnxruntime/GIT_COMMIT_ID

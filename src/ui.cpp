@@ -22,7 +22,9 @@ App::App(Store &s, const QString &path, QObject *parent)
   }
   clock.intervalMs =
       qBound(1, settings.value("interval_minutes", 5).toInt(), 120) * 60000;
-  clock.sessionSize = qBound(1, settings.value("session_count", 2).toInt(), 5);
+  clock.sessionSize = qBound(1, settings.value("session_count", 2).toInt(),
+             PracticeClock::maxSessionSize);
+  snoozeMinutes = qBound(1, settings.value("snooze_minutes", 30).toInt(), 240);
   dashboard.setWindowTitle("Moji Nook · Japanese practice");
   dashboard.setWindowIcon(appIcon());
   const auto available = QGuiApplication::primaryScreen()->availableGeometry().size();
@@ -90,7 +92,8 @@ App::App(Store &s, const QString &path, QObject *parent)
       recap.dismiss();
     }
   });
-  trayMenu.addAction("Snooze 30 minutes", this, &App::snoozePractice);
+  snoozeAction = trayMenu.addAction({}, this, &App::snoozePractice);
+  refreshSnoozeLabels();
   trayMenu.addSeparator();
   trayMenu.addAction("Sync WaniKani", this, &App::syncNow);
   trayMenu.addSeparator();
@@ -353,8 +356,15 @@ void App::snoozePractice() {
   recap.dismiss();
   pauseAction->setChecked(false);
   card.close();
-  clock.timer.start(30 * 60000);
+  clock.timer.start(snoozeMinutes * 60000);
   refreshHomeState();
+}
+void App::refreshSnoozeLabels() {
+  const QString text = QString("Snooze %1 minutes").arg(snoozeMinutes);
+  if (snoozeAction)
+    snoozeAction->setText(text);
+  if (auto *snooze = dashboard.findChild<QPushButton *>("homeSnooze"))
+    snooze->setText(text);
 }
 void App::refreshHomeState() {
   const bool ready = !pool.isEmpty();

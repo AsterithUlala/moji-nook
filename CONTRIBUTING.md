@@ -36,7 +36,7 @@ Preserve required upstream attribution when simplifying documentation.
 
 Every push builds the Arch package, AppImage, and Windows zip in the **Build**
 workflow. To publish them, either push a `v*` tag, or open **Actions → Build →
-Run workflow** on `main` and enter a new tag such as `v0.1.1-alpha`. Tags
+Run workflow** on `main` and enter a new tag such as `v0.1.3-alpha`. Tags
 containing `alpha` or `beta` are marked as pre-releases. Update `_tag` in
 `packaging/arch/PKGBUILD` and the version in `CMakeLists.txt` and
 `src/main.cpp` first.

@@ -865,19 +865,19 @@ private slots:
     QVERIFY(voice && engine);
     if (JapaneseSpeech().available("quality")) {
       QCOMPARE(engine->currentData().toString(), QString("quality"));
-      voice->setCurrentIndex(voice->findData("metan"));
+      voice->setCurrentIndex(voice->findData("itako"));
       QVERIFY(dashboard->findChild<QLabel *>("speechVoiceCredits")->isVisible());
       if (engine->findData("fast") >= 0) {
         engine->setCurrentIndex(engine->findData("fast"));
         voice->setCurrentIndex(voice->findData("takumi"));
         engine->setCurrentIndex(engine->findData("quality"));
-        QCOMPARE(voice->currentData().toString(), QString("metan"));
+        QCOMPARE(voice->currentData().toString(), QString("itako"));
       }
     }
     // Builds with only Quality speech (Windows) do not offer Fast.
     const bool fastOffered = engine->findData("fast") >= 0;
     const QString savedEngine = fastOffered ? "fast" : "quality";
-    const QString savedVoice = fastOffered ? "takumi" : "zundamon";
+    const QString savedVoice = fastOffered ? "takumi" : "takehiro";
     engine->setCurrentIndex(engine->findData(savedEngine));
     voice->setCurrentIndex(voice->findData(savedVoice));
     QCOMPARE(dashboard->findChild<QLabel *>("speechVoiceCredits")->isVisible(), !fastOffered);
@@ -1374,6 +1374,14 @@ private slots:
     snooze->click();
     QCOMPARE(pause->text(), QString("Pause reminders"));
     QTRY_VERIFY(window->findChild<QLabel *>("practiceSchedule")->text().contains("29:5"));
+    QCOMPARE(snooze->text(), QString("Snooze 30 minutes"));
+    auto *snoozeLength = window->findChild<QSpinBox *>("snoozeMinutes");
+    QVERIFY(snoozeLength);
+    QCOMPARE(window->findChild<QSpinBox *>("sessionCount")->maximum(), 25);
+    snoozeLength->setValue(10);
+    QCOMPARE(snooze->text(), QString("Snooze 10 minutes"));
+    snooze->click();
+    QTRY_VERIFY(window->findChild<QLabel *>("practiceSchedule")->text().contains("in 9:5"));
     QSqlQuery q(store.db);
     QVERIFY(q.exec("SELECT COUNT(*) FROM attempts"));
     QVERIFY(q.next());
@@ -1885,6 +1893,10 @@ private slots:
     QVERIFY(clock.timer.isActive());
     clock.request();
     QCOMPARE(clock.sessionTotal, 5);
+    clock.complete();
+    clock.sessionSize = 99;
+    clock.request();
+    QCOMPARE(clock.sessionTotal, PracticeClock::maxSessionSize);
     clock.setPaused(true);
     clock.advance();
     QCOMPARE(clock.position, 1);

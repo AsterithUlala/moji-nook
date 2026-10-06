@@ -9,7 +9,7 @@ void PracticeClock::request() {
     return;
   timer.stop();
   pending = true;
-  sessionTotal = qBound(1, sessionSize, 5);
+  sessionTotal = qBound(1, sessionSize, maxSessionSize);
   position = 1;
   sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   emit due();

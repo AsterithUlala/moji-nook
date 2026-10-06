@@ -136,18 +136,18 @@ private slots:
       QCOMPARE(generated.count(), count);
       QCOMPARE(generated.last()[0].toString(), originalPath);
     }
-    QCOMPARE(waveHashes.size(), 3);
-    speech.configure(true, "tsumugi", 35, .75, "quality");
+    QCOMPARE(waveHashes.size(), JapaneseSpeech::voices("quality").size());
+    speech.configure(true, "kiritan", 35, .75, "quality");
     speech.say("おはようございます", "slow");
     ++count;
     QTRY_COMPARE_WITH_TIMEOUT(generated.count(), count, 30000);
     const auto slow = QFileInfo(generated.last()[0].toString()).size();
-    speech.configure(true, "tsumugi", 35, 1.25, "quality");
+    speech.configure(true, "kiritan", 35, 1.25, "quality");
     speech.say("おはようございます", "fast");
     ++count;
     QTRY_COMPARE_WITH_TIMEOUT(generated.count(), count, 30000);
     QVERIFY(slow > QFileInfo(generated.last()[0].toString()).size());
-    speech.configure(false, "tsumugi", 35, 1., "quality");
+    speech.configure(false, "kiritan", 35, 1., "quality");
     QTRY_VERIFY(!speech.findChild<QProcess *>("qualitySpeechWorker"));
     speech.replay();
     QCOMPARE(generated.count(), count);
@@ -158,13 +158,13 @@ private slots:
       QSKIP("This build has no bundled Quality speech assets.");
     QSignalSpy generated(&speech, &JapaneseSpeech::generated);
     QSignalSpy errors(&speech, &JapaneseSpeech::error);
-    speech.configure(true, "metan", 35, 1., "quality");
+    speech.configure(true, "itako", 35, 1., "quality");
     speech.say("おはようございます", "old-neural-card");
     QTest::qWait(100); // Cancel during real model startup/inference.
     speech.stop();
     // Windows bundles only Quality; cancel into another neural speaker there.
     const bool fast = speech.available("fast");
-    speech.configure(true, fast ? "mei" : "tsumugi", 35, 1., fast ? "fast" : "quality");
+    speech.configure(true, fast ? "mei" : "kiritan", 35, 1., fast ? "fast" : "quality");
     speech.say("ねこ", "new-card");
     QTRY_COMPARE_WITH_TIMEOUT(generated.count(), 1, 30000);
     QTest::qWait(1500);
@@ -173,10 +173,10 @@ private slots:
     const auto cache = QFileInfo(generated.last()[0].toString()).absolutePath();
     QCOMPARE(QDir(cache).entryList({"*.wav"}, QDir::Files).size(), 1);
     // Replay after changing engine must use the new engine's speaker bank.
-    speech.configure(true, "zundamon", 35, 1., "quality");
+    speech.configure(true, "takehiro", 35, 1., "quality");
     speech.replay();
     QTRY_COMPARE_WITH_TIMEOUT(generated.count(), 2, 30000);
-    QCOMPARE(generated.last()[1].toString(), QString("zundamon"));
+    QCOMPARE(generated.last()[1].toString(), QString("takehiro"));
     QCOMPARE(errors.count(), 0);
   }
 };
