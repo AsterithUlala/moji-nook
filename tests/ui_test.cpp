@@ -867,21 +867,27 @@ private slots:
       QCOMPARE(engine->currentData().toString(), QString("quality"));
       voice->setCurrentIndex(voice->findData("metan"));
       QVERIFY(dashboard->findChild<QLabel *>("speechVoiceCredits")->isVisible());
-      engine->setCurrentIndex(engine->findData("fast"));
-      voice->setCurrentIndex(voice->findData("takumi"));
-      engine->setCurrentIndex(engine->findData("quality"));
-      QCOMPARE(voice->currentData().toString(), QString("metan"));
+      if (engine->findData("fast") >= 0) {
+        engine->setCurrentIndex(engine->findData("fast"));
+        voice->setCurrentIndex(voice->findData("takumi"));
+        engine->setCurrentIndex(engine->findData("quality"));
+        QCOMPARE(voice->currentData().toString(), QString("metan"));
+      }
     }
-    engine->setCurrentIndex(engine->findData("fast"));
-    voice->setCurrentIndex(voice->findData("takumi"));
-    QVERIFY(!dashboard->findChild<QLabel *>("speechVoiceCredits")->isVisible());
+    // Builds with only Quality speech (Windows) do not offer Fast.
+    const bool fastOffered = engine->findData("fast") >= 0;
+    const QString savedEngine = fastOffered ? "fast" : "quality";
+    const QString savedVoice = fastOffered ? "takumi" : "zundamon";
+    engine->setCurrentIndex(engine->findData(savedEngine));
+    voice->setCurrentIndex(voice->findData(savedVoice));
+    QCOMPARE(dashboard->findChild<QLabel *>("speechVoiceCredits")->isVisible(), !fastOffered);
     dashboard->findChild<QSlider *>("speechVolume")->setValue(20);
     dashboard->findChild<QSlider *>("speechRate")->setValue(85);
     dashboard->findChild<QCheckBox *>("speechAutoplay")->setChecked(false);
     dashboard->findChild<QCheckBox *>("speechEnabled")->setChecked(false);
     QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
-    QCOMPARE(saved.value("speech/voice").toString(), QString("takumi"));
-    QCOMPARE(saved.value("speech/engine").toString(), QString("fast"));
+    QCOMPARE(saved.value("speech/voice").toString(), savedVoice);
+    QCOMPARE(saved.value("speech/engine").toString(), savedEngine);
     QCOMPARE(saved.value("speech/volume").toInt(), 20);
     QCOMPARE(saved.value("speech/rate").toInt(), 85);
     QCOMPARE(saved.value("speech/autoplay").toBool(), false);

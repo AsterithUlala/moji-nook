@@ -35,8 +35,10 @@ jobs:
     # runs on most current distributions.
     runs-on: ubuntu-22.04
     env:
-      ECM_VERSION: v6.10.0
-      LAYER_SHELL_QT_VERSION: v6.3.5
+      # LayerShellQt 6.6 adds Window::setScreen, which the overlay uses; it
+      # needs Qt 6.10 and ECM 6.22.
+      ECM_VERSION: v6.22.0
+      LAYER_SHELL_QT_VERSION: v6.6.0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,7 +54,7 @@ jobs:
             libxcb-image0 libpulse0 fonts-noto-cjk
       - uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.10.*"
           host: linux
           target: desktop
           arch: linux_gcc_64
@@ -93,7 +95,9 @@ jobs:
           chmod +x linuxdeploy linuxdeploy-plugin-qt
           export LD_LIBRARY_PATH="$QT_ROOT_DIR/lib:$LD_LIBRARY_PATH"
           export QMAKE="$QT_ROOT_DIR/bin/qmake"
-          export EXTRA_PLATFORM_PLUGINS="libqwayland-generic.so;libqwayland-egl.so"
+          # Qt 6.10 may ship one merged Wayland plugin; deploy whichever exist.
+          export EXTRA_PLATFORM_PLUGINS=$(cd "$QT_ROOT_DIR/plugins/platforms" && ls libqwayland*.so | paste -sd';')
+          echo "Wayland platform plugins: $EXTRA_PLATFORM_PLUGINS"
           export EXTRA_QT_MODULES="waylandclient"
           export APPIMAGE_EXTRACT_AND_RUN=1
           ./linuxdeploy --appdir AppDir --plugin qt \
@@ -163,7 +167,18 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            # QtTest output can be lost under ctest on Windows; rerun failures to a log.
+            foreach ($test in Get-ChildItem build/moji_nook_*_tests.exe) {
+              $log = Join-Path $env:RUNNER_TEMP "$($test.BaseName).txt"
+              & $test.FullName -platform offscreen -o "$log,txt"
+              if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String -NotMatch '^PASS' }
+            }
+            exit 1
+          }
       - name: Package
         shell: pwsh
         run: |
