@@ -11,9 +11,17 @@
     "url": "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz",
     "sha256": "fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a"
   },
-  "voicevox-0.vvm": {
-    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/0.vvm",
-    "sha256": "917e592cae92a02fb7668bd9e168df4e39c8ab2f5302c2be71906c70ec4e2df2"
+  "voicevox-4.vvm": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/4.vvm",
+    "sha256": "da5aaad87d5b7ea5b346def2e610cc63e64a90088bb0fc2d27fb63a622113953"
+  },
+  "voicevox-9.vvm": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/9.vvm",
+    "sha256": "5145551d31ed4fab14d7921aafdd2db5c9e90da40d5b59f9418ee435c400c2fa"
+  },
+  "voicevox-21.vvm": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/21.vvm",
+    "sha256": "da1172da295f89e9733cde36468365f573133e1903a4fe9cd47b2ba4bdadbeac"
   },
   "voicevox-vvm-TERMS.txt": {
     "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/TERMS.txt",

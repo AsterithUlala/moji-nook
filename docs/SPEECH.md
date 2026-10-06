@@ -23,8 +23,10 @@ was checked against the first-party [MMDAgent Example 1.8 distribution](https://
 Tohoku F01 comes from the [laboratory repository](https://github.com/icn-lab/htsvoice-tohoku-f01/tree/8e3306021db135c265f5eda5f062dc489707ddf8).
 
 **Quality** uses VOICEVOX Core 0.17.0, VOICEVOX ONNX Runtime 1.17.3, and voice
-models 0.16.4. The `0.vvm` model supplies neutral Shikoku Metan (style 2),
-Zundamon (3), and Kasukabe Tsumugi (8). It reuses Fast's dictionary.
+models 0.16.4: one adult and one child voice of each gender, all in their
+normal style. `21.vvm` supplies Tohoku Itako (woman, style 109) and Tohoku
+Kiritan (girl, 108), `4.vvm` Kurono Takehiro (man, 11), and `9.vvm` Shirakami
+Kotarou (boy, 12). The worker loads one model at a time. It reuses Fast's dictionary.
 [quality-assets.json](../scripts/quality-assets.json) pins all downloads and hashes.
 The native C ABI keeps Python and a separate HTTP speech server out of runtime.
 Sources: [Core release](https://github.com/VOICEVOX/voicevox_core/tree/0.17.0),
@@ -57,11 +59,10 @@ the bundles were introduced; recheck terms when updating assets.
 - **VOICEVOX models:** preserve the [model terms](https://github.com/VOICEVOX/voicevox_vvm/blob/0.16.4/TERMS.txt)
   and README. Model/voice conditions are separate from Core's source license and
   include generated-audio conditions for downstream users.
-- **Selected Quality voices:** keep discoverable credits `VOICEVOX:四国めたん`,
-  `VOICEVOX:ずんだもん`, and `VOICEVOX:春日部つむぎ`, plus the selected voices' terms.
-  Sources: [Metan/Zundamon terms](https://zunko.jp/con_ongen_kiyaku.html),
-  [Tsumugi terms](https://tsumugi-official.studio.site/rule), and
-  [application FAQ](https://tsumugi-official.studio.site/rule2).
+- **Selected Quality voices:** keep discoverable credits `VOICEVOX:東北イタコ`,
+  `VOICEVOX:玄野武宏`, `VOICEVOX:白上虎太郎`, and `VOICEVOX:東北きりたん`, plus
+  the selected voices' terms. Sources: [Itako/Kiritan terms](https://zunko.jp/con_ongen_kiyaku.html)
+  and [Takehiro/Kotarou terms](https://www.virvoxproject.com/voicevoxの利用規約).
 
 Qt and LayerShellQt are used as system libraries under their own licenses
 (LGPL v3). Moji Nook's own source is [MIT licensed](../LICENSE); that license

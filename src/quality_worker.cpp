@@ -36,6 +36,9 @@ public:
                 return error;
             }
         }
+        const QString modelError = loadModelFor(style);
+        if (!modelError.isEmpty())
+            return modelError;
         char *query = nullptr;
         const QByteArray utf8Text = text.toUtf8();
         auto result = voicevox_synthesizer_create_audio_query(synthesizer_, utf8Text.constData(),
@@ -95,16 +98,33 @@ private:
         result = voicevox_synthesizer_new(runtime, dictionary_, options, &synthesizer_);
         if (result != VOICEVOX_RESULT_OK)
             return coreError(QStringLiteral("Initializing speech synthesizer"), result);
-        const QByteArray modelPath = QDir(bundle_).filePath(QStringLiteral("quality/models/0.vvm")).toUtf8();
+        return {};
+    }
+
+    // Each model holds roughly 125 MB, so keep only the current voice's model.
+    QString loadModelFor(int style)
+    {
+        const QString file = QString::fromUtf8(qualityVoiceForStyle(style)->model);
+        if (file == loadedFile_)
+            return {};
+        if (!loadedFile_.isEmpty()) {
+            const auto result = voicevox_synthesizer_unload_voice_model(synthesizer_, &loadedId_);
+            if (result != VOICEVOX_RESULT_OK)
+                return coreError(QStringLiteral("Unloading voice model"), result);
+            loadedFile_.clear();
+        }
+        const QByteArray modelPath = QDir(bundle_).filePath(QStringLiteral("quality/models/") + file).toUtf8();
         VoicevoxVoiceModelFile *model = nullptr;
-        result = voicevox_voice_model_file_open(modelPath.constData(), &model);
+        auto result = voicevox_voice_model_file_open(modelPath.constData(), &model);
         if (result != VOICEVOX_RESULT_OK)
             return coreError(QStringLiteral("Opening voice model"), result);
+        voicevox_voice_model_file_id(model, &loadedId_);
         result = voicevox_synthesizer_load_voice_model(synthesizer_, model,
                                                       voicevox_make_default_load_voice_model_options());
         voicevox_voice_model_file_delete(model);
         if (result != VOICEVOX_RESULT_OK)
             return coreError(QStringLiteral("Loading voice model"), result);
+        loadedFile_ = file;
         return {};
     }
 
@@ -116,11 +136,14 @@ private:
             voicevox_open_jtalk_rc_delete(dictionary_);
         synthesizer_ = nullptr;
         dictionary_ = nullptr;
+        loadedFile_.clear();
     }
 
     QString bundle_;
     OpenJtalkRc *dictionary_ = nullptr;
     VoicevoxSynthesizer *synthesizer_ = nullptr;
+    QString loadedFile_;
+    uint8_t loadedId_[16] = {};
 };
 
 QString validate(const QJsonObject &request)
@@ -133,8 +156,9 @@ QString validate(const QJsonObject &request)
     if (!text.isString() || text.toString().trimmed().isEmpty() || text.toString().contains(QChar(0)))
         return QStringLiteral("text must be a nonempty string without NUL characters");
     const QJsonValue style = request.value(QStringLiteral("style"));
-    if (!style.isDouble() || (style.toDouble() != 2 && style.toDouble() != 3 && style.toDouble() != 8))
-        return QStringLiteral("style must be 2, 3, or 8");
+    if (!style.isDouble() || style.toDouble() != std::floor(style.toDouble())
+        || !qualityVoiceForStyle(style.toInt()))
+        return QStringLiteral("style must be a bundled Quality voice");
     const QJsonValue rate = request.value(QStringLiteral("rate"));
     if (!rate.isDouble() || rate.toDouble() < 0.75 || rate.toDouble() > 1.25)
         return QStringLiteral("rate must be between 0.75 and 1.25");

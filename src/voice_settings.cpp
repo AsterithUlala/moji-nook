@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "ui_helpers.h"
+#include "voicevox_files.h"
 
 void App::buildSpeechSettings(QVBoxLayout *layout) {
   auto *group = new QWidget;
@@ -46,7 +47,8 @@ void App::buildSpeechSettings(QVBoxLayout *layout) {
     const QSignalBlocker blocker(voice);
     const auto bank = engine->currentData().toString();
     voice->clear();
-    voice->addItem("Random · vary between three voices", "random");
+    voice->addItem(QString("Random · vary between %1 voices")
+                       .arg(JapaneseSpeech::voices(bank).size()), "random");
     for (const auto &id : JapaneseSpeech::voices(bank))
       voice->addItem(JapaneseSpeech::voiceName(id), id);
     voice->setCurrentIndex(qMax(0, voice->findData(settings.value(
@@ -100,7 +102,10 @@ void App::buildSpeechSettings(QVBoxLayout *layout) {
                       "Local voices handle cards without a recording.");
   body->addWidget(recorded);
   body->addWidget(label("Uses the local voice when a recording is unavailable.", "muted"));
-  auto *credits = label("VOICEVOX:四国めたん · VOICEVOX:ずんだもん · VOICEVOX:春日部つむぎ", "muted");
+  QStringList voiceCredits;
+  for (const auto &quality : qualityVoices)
+    voiceCredits << QString::fromUtf8(quality.credit);
+  auto *credits = label(voiceCredits.join(" · "), "muted");
   credits->setObjectName("speechVoiceCredits");
   credits->setToolTip("Quality voice credits. Full terms and notices are included in the local speech bundle.");
   body->addWidget(credits);
@@ -108,7 +113,9 @@ void App::buildSpeechSettings(QVBoxLayout *layout) {
   state->setObjectName("speechAvailability");
   form->addWidget(state);
   auto updateAvailability = [this, state, engine] {
-    state->setText(speech.available(engine->currentData().toString()) ? "Available offline · three Japanese voices"
+    const auto bank = engine->currentData().toString();
+    state->setText(speech.available(bank)
+        ? QString("Available offline · %1 Japanese voices").arg(JapaneseSpeech::voices(bank).size())
                                     : "Japanese voice files are unavailable");
   };
   updateAvailability();

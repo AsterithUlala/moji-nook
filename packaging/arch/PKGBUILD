@@ -1,6 +1,6 @@
 pkgname=moji-nook
-_tag=0.1.0-alpha
-pkgver=0.1.0alpha
+_tag=0.1.2-alpha
+pkgver=0.1.2alpha
 pkgrel=1
 pkgdesc="A quiet WaniKani companion: short Japanese practice cards over your other windows"
 arch=('x86_64')

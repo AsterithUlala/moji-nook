@@ -82,7 +82,7 @@ screen remains until answered or dismissed.
 ## Everyday practice
 
 The default session is **two cards**, with a **five-minute** reminder interval.
-Session size is adjustable from one to five. The next interval starts after
+Session size is adjustable from one to 25. The next interval starts after
 completing or ending the session, not after revealing an answer. Busy time does
 not accumulate a backlog of cards.
 
@@ -120,7 +120,9 @@ After activating the card, use **Tab** to move between controls, **Enter** to
 check a typed answer and then finish, and **Escape** to close. Shortcuts are
 local to the card. Closing before grading records a dismissal without scoring;
 closing after grading keeps the result. Pausing hides a pending card, and
-resuming brings it back. **Snooze 30 minutes** dismisses it and delays the next session.
+resuming brings it back. **Snooze** dismisses it and delays the next session
+by the snooze length: 30 minutes by default, adjustable under Settings →
+Practice → Schedule.
 
 [Example checked card](previews/card-answer.png) uses synthetic practice data.
 
@@ -143,7 +145,8 @@ stays large; long options wrap and tall cards scroll.
 
 On a build with the bundled voices, **Sound & voice → Japanese voice** offers:
 
-- **Quality:** offline VOICEVOX voices, Shikoku Metan, Zundamon, and Kasukabe Tsumugi.
+- **Quality:** offline VOICEVOX voices: Tohoku Itako (woman), Kurono Takehiro (man),
+  Shirakami Kotarou (boy), and Tohoku Kiritan (girl).
 - **Fast:** offline Open JTalk voices, Mei, Takumi, and Tohoku.
 
 Quality is the default when available. Voice choice is random per new card by

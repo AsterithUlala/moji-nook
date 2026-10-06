@@ -96,7 +96,9 @@ def main():
             shutil.copy2(dictionary / 'COPYING', quality / 'licenses/open-jtalk-dictionary/COPYING')
             (dictionary / 'COPYING').unlink()
         shutil.copytree(core / 'include', quality / 'include')
-        shutil.copy2(downloads / 'voicevox-0.vvm', quality / 'models/0.vvm')
+        for name in assets:
+            if name.endswith('.vvm'):
+                shutil.copy2(downloads / name, quality / 'models' / name.removeprefix('voicevox-'))
         # Preserve every upstream top-level notice and metadata file verbatim.
         for directory, destination in [(core, 'voicevox-core'), (runtime, 'voicevox-onnxruntime')]:
             for path in directory.iterdir():
@@ -107,9 +109,10 @@ def main():
                          quality / 'licenses/voicevox-vvm' / (name + '.txt'))
         (quality / 'licenses/ATTRIBUTION.txt').write_text(
             'Moji Nook Quality Japanese pronunciation uses VOICEVOX.\n'
-            'VOICEVOX:四国めたん (Shikoku Metan), neutral style 2.\n'
-            'VOICEVOX:ずんだもん (Zundamon), neutral style 3.\n'
-            'VOICEVOX:春日部つむぎ (Kasukabe Tsumugi), neutral style 8.\n'
+            'VOICEVOX:東北イタコ (Tohoku Itako), normal style 109.\n'
+            'VOICEVOX:玄野武宏 (Kurono Takehiro), normal style 11.\n'
+            'VOICEVOX:白上虎太郎 (Shirakami Kotarou), normal style 12.\n'
+            'VOICEVOX:東北きりたん (Tohoku Kiritan), normal style 108.\n'
             'VOICEVOX Core 0.17.0: MIT; see voicevox-core/LICENSE.\n'
             'VOICEVOX ONNX Runtime 1.17.3: see voicevox-onnxruntime/TERMS.txt and third-party-notices.html.\n'
             'VOICEVOX voice models 0.16.4: see voicevox-vvm/TERMS.txt and README.txt.\n'
