@@ -1,8 +1,8 @@
 # Install Moji Nook
 
-Moji Nook is an early alpha (0.1.0). Arch Linux users can install the prebuilt
-package from the [releases page](https://github.com/AsterithUlala/moji-nook/releases);
-everyone else builds from source. Build commands below start from the repository
+Moji Nook is an early alpha (0.1.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
+has an Arch package, an AppImage for other Linux distributions, and an
+experimental Windows zip. You can also build from source. Build commands below start from the repository
 directory after cloning.
 
 ## Install the Arch package
@@ -32,6 +32,23 @@ cd packaging/arch
 This requires Arch Linux's `makepkg` and the build dependencies below. The script
 packages the committed `HEAD`, not uncommitted edits, and leaves
 `moji-nook-*.pkg.tar.zst` in `packaging/arch/`.
+
+## Install the AppImage
+
+For Linux distributions other than Arch. The AppImage bundles Qt 6.8,
+LayerShellQt, and both offline speech engines, and needs glibc 2.35 or newer
+(Ubuntu 22.04, Debian 12, Fedora 36, or later).
+
+```sh
+chmod +x moji-nook-x86_64.AppImage
+./moji-nook-x86_64.AppImage --demo
+```
+
+AppImages need FUSE 2. If it reports a FUSE error, install `libfuse2`
+(`libfuse2t64` on Ubuntu 24.04 and later), or run it with
+`--appimage-extract-and-run`. To add it to your launcher, use a tool such as
+Gear Lever or AppImageLauncher. To remove it, quit the app and delete the file;
+your practice profile stays in place.
 
 ## Platform support
 
@@ -196,20 +213,20 @@ directories were installed too. Missing audio does not prevent practice.
 
 ## Windows (experimental)
 
-Each `v*` release tag runs [`.github/workflows/windows.yml`](../.github/workflows/windows.yml),
-which builds with MSVC and Qt 6.8, runs the test suite, and attaches
-`moji-nook-windows-x64.zip` to the release. Every push also uploads the same
-folder as a workflow artifact, so you can try a build from the Actions tab.
+[`.github/workflows/build.yml`](../.github/workflows/build.yml) builds the zip
+with MSVC and Qt 6.8 and runs the test suite on every push; a `v*` tag attaches
+it, with the Linux packages, to a GitHub release.
 
-The zip is portable: extract it anywhere and run `moji-nook.exe`. It bundles Qt
-and the MSVC runtime, so nothing else needs to be installed. Practice data lives
+The zip is portable: extract it anywhere and run `moji-nook.exe`. It bundles Qt,
+the MSVC runtime, and the Quality speech engine, so nothing else needs to be
+installed. Practice data lives
 in `%LOCALAPPDATA%\MojiNook\Moji Nook`. To remove Moji Nook, quit it from the
 tray and delete the extracted folder.
 
 Known limits:
 
-- **No Japanese pronunciation yet.** The Fast and Quality speech bundles are
-  prepared for Linux only. Anki deck recordings can still play.
+- **Quality voices only.** VOICEVOX neural voices are included; the Fast
+  (Open JTalk) voices are Linux-only for now.
 - **Overlay behavior is untested by hand.** Cards use a topmost window that
   should not take focus, but fullscreen games and exclusive-fullscreen apps
   may cover it.
@@ -219,11 +236,12 @@ Known limits:
   directory, protected by your account's application-data permissions rather
   than Windows Credential Manager. See [storage](USAGE.md#storage-backups-and-privacy).
 
-To build locally, install Qt 6.5+ (with Multimedia), CMake, Ninja, and Visual
-Studio's C++ tools, then from a *Developer PowerShell*:
+To build locally, install Qt 6.5+ (with Multimedia), CMake, Ninja, Python 3.12+,
+and Visual Studio's C++ tools, then from a *Developer PowerShell*:
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUNDLE_SPEECH=OFF
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
 cmake --build build
-windeployqt --release build\moji-nook.exe
+cmake --install build --prefix dist
+windeployqt --release dist\moji-nook.exe
 ```

@@ -90,12 +90,21 @@ sudo pacman -U moji-nook-*.pkg.tar.zst
 moji-nook --demo   # try sample words, no account needed
 ```
 
+**Other Linux distributions:** download `moji-nook-x86_64.AppImage` from the
+[latest release](https://github.com/AsterithUlala/moji-nook/releases). It bundles
+Qt, LayerShellQt, and both speech engines:
+
+```sh
+chmod +x moji-nook-x86_64.AppImage
+./moji-nook-x86_64.AppImage --demo
+```
+
 **Windows (experimental):** download `moji-nook-windows-x64.zip` from the
 [latest release](https://github.com/AsterithUlala/moji-nook/releases), extract
-it anywhere, and run `moji-nook.exe`. Japanese pronunciation is not included on
-Windows yet. See [Windows](docs/INSTALL.md#windows-experimental) for details.
+it anywhere, and run `moji-nook.exe`. Windows includes the Quality voices but not
+the Fast voices. See [Windows](docs/INSTALL.md#windows-experimental) for details.
 
-**Other distributions:** build from source.
+**From source:**
 
 ```sh
 git clone https://github.com/AsterithUlala/moji-nook.git
