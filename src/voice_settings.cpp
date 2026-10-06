@@ -22,6 +22,8 @@ void App::buildSpeechSettings(QVBoxLayout *layout) {
   engine->setAccessibleName("Japanese speech performance and quality");
   engine->addItem("Fast · lightweight voices", "fast");
   engine->addItem("Quality · neural voices", "quality");
+  if (!speech.available("fast") && speech.available("quality"))
+    engine->removeItem(engine->findData("fast"));
   const auto defaultEngine = speech.available("quality") ? "quality" : "fast";
   engine->setCurrentIndex(qMax(0, engine->findData(
       settings.value("speech/engine", defaultEngine).toString())));

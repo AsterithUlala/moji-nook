@@ -11,6 +11,7 @@
 #include <limits>
 #include <string>
 #include <voicevox_core.h>
+#include "voicevox_files.h"
 
 namespace {
 QString coreError(const QString &operation, VoicevoxResultCode result)
@@ -77,8 +78,7 @@ public:
 private:
     QString initialize()
     {
-        const QByteArray runtimePath = QDir(bundle_).filePath(
-            QStringLiteral("quality/lib/libvoicevox_onnxruntime.so.1.17.3")).toUtf8();
+        const QByteArray runtimePath = QDir(bundle_).filePath(voicevoxRuntimeLibrary()).toUtf8();
         auto runtimeOptions = voicevox_make_default_load_onnxruntime_options();
         runtimeOptions.filename = runtimePath.constData();
         const VoicevoxOnnxruntime *runtime = nullptr;

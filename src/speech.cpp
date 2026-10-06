@@ -1,4 +1,5 @@
 #include "speech.h"
+#include "voicevox_files.h"
 #include <QGuiApplication>
 
 JapaneseSpeech::JapaneseSpeech(QObject *parent) : QObject(parent) {
@@ -33,12 +34,12 @@ QString JapaneseSpeech::bundleDirectory() {
   candidates << QString::fromUtf8(MOJI_NOOK_SPEECH_DIR);
 #endif
   for (const auto &dir : candidates)
-    if (QFileInfo::exists(dir + "/bin/open_jtalk"))
+    if (QFileInfo::exists(dir + "/dictionary/sys.dic"))
       return QDir(dir).absolutePath();
   return {};
 }
 QString JapaneseSpeech::qualityWorkerPath() {
-  const auto installed = QCoreApplication::applicationDirPath() + "/moji-nook-quality-worker";
+  const auto installed = QCoreApplication::applicationDirPath() + "/" + qualityWorkerFileName();
   if (QFileInfo(installed).isExecutable())
     return installed;
 #ifdef MOJI_NOOK_QUALITY_WORKER
@@ -56,8 +57,8 @@ bool JapaneseSpeech::available(const QString &engine) const {
   if (selected == "quality")
     return !qualityWorkerPath().isEmpty() &&
         QFileInfo::exists(dir + "/quality/models/0.vvm") &&
-        QFileInfo::exists(dir + "/quality/lib/libvoicevox_core.so") &&
-        QFileInfo::exists(dir + "/quality/lib/libvoicevox_onnxruntime.so.1.17.3");
+        QFileInfo::exists(dir + "/" + voicevoxCoreLibrary()) &&
+        QFileInfo::exists(dir + "/" + voicevoxRuntimeLibrary());
   if (!QFileInfo(dir + "/bin/open_jtalk").isExecutable())
     return false;
   for (const auto &voice : voices("fast"))
@@ -290,6 +291,12 @@ void JapaneseSpeech::synthesizeQuality(const QString &text, const QString &voice
     qualityWorker = worker;
     worker->setProgram(qualityWorkerPath());
     worker->setArguments({"--bundle", bundleDirectory()});
+#ifdef Q_OS_WIN
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert("PATH", QDir::toNativeSeparators(bundleDirectory() + "/quality/lib") + ";" +
+                                   environment.value("PATH"));
+    worker->setProcessEnvironment(environment);
+#endif
     connect(worker, &QProcess::started, this, [this, worker] {
       if (qualityWorker == worker && qualityBusy)
         worker->write(worker->property("payload").toByteArray());
