@@ -57,9 +57,9 @@ The overlay uses LayerShellQt to appear above ordinary and fullscreen windows
 without taking keyboard focus on arrival. Other Wayland compositors and X11
 sessions need their own native checks; offscreen tests cannot establish this.
 
-Linux builds require LayerShellQt. Bundled Japanese speech is currently prepared
-only for Linux x86_64. On other architectures, build without bundled speech and
-treat the port as unvalidated.
+Linux builds require LayerShellQt. Bundled Japanese speech is prepared for
+Linux x86_64 (Fast and Quality) and Windows x64 (Quality only). On other
+architectures, build without bundled speech and treat the port as unvalidated.
 
 Windows x64 builds compile and pass the test suite in CI, and a portable zip is
 published with each release (see [Windows](#windows-experimental)). Desktop
@@ -122,7 +122,7 @@ on your desktop as well. Use `--demo` or a disposable `--data-dir` for testing.
 Default Linux x86_64 builds prepare both **Fast** (Open JTalk) and **Quality**
 (VOICEVOX) Japanese speech. Hash-pinned downloads come from Debian, GitHub, and
 upstream voice repositories during CMake configuration. Fast occupies about
-109 MiB and Quality adds about 78 MiB in the prepared bundle; download caches,
+109 MiB and Quality adds about 190 MiB in the prepared bundle; download caches,
 Qt, and build outputs need additional space. Runtime playback needs no speech
 server, account, Python installation, or first-use downloads.
 

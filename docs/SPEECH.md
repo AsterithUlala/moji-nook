@@ -64,8 +64,11 @@ the bundles were introduced; recheck terms when updating assets.
   the selected voices' terms. Sources: [Itako/Kiritan terms](https://zunko.jp/con_ongen_kiyaku.html)
   and [Takehiro/Kotarou terms](https://www.virvoxproject.com/voicevoxの利用規約).
 
-Qt and LayerShellQt are used as system libraries under their own licenses
-(LGPL v3). Moji Nook's own source is [MIT licensed](../LICENSE); that license
+Qt and LayerShellQt are used under their own licenses (LGPL v3). The Arch
+package uses them as system libraries. The AppImage and Windows zip bundle them,
+along with Qt Multimedia's FFmpeg and other shared libraries, unmodified and
+dynamically linked; extract the AppImage with `--appimage-extract`, or open the
+zip, to inspect or replace them. Moji Nook's own source is [MIT licensed](../LICENSE); that license
 does not replace the voice-model, upstream content, or dependency terms above.
 Installed builds place these notices under `share/moji-nook/speech/licenses/`
 and `share/moji-nook/speech/quality/licenses/`.

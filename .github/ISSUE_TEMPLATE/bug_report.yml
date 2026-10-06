@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in Moji Nook does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the alpha. Please remove API tokens, account details, and
+        personal study data from logs and screenshots; `--demo` or a disposable
+        `--data-dir` profile is the safest way to reproduce a problem.
+  - type: input
+    id: version
+    attributes:
+      label: Moji Nook version
+      description: Run `moji-nook --version`, or give the commit for source builds.
+      placeholder: 0.1.2-alpha
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Arch package
+        - AppImage
+        - Windows zip
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Operating system, desktop, and session
+      placeholder: Arch Linux, KDE Plasma 6.6, Wayland (or Windows 11)
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Practice source
+      options:
+        - WaniKani
+        - Anki
+        - Demo
+        - Not relevant
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal output
+      description: Start Moji Nook from a terminal and paste any warnings or errors.
+      render: text
