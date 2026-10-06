@@ -1,6 +1,8 @@
 # Offline Japanese speech and attribution
 
-Moji Nook's Linux x86_64 build prepares two local pronunciation engines. The app
+Moji Nook's Linux x86_64 build prepares two local pronunciation engines; the
+Windows x64 build prepares Quality only, using the Open JTalk UTF-8 dictionary
+1.11 from `scripts/quality-assets-windows.json`. The app
 speaks the source's accepted kana reading to avoid ambiguous kanji interpretation.
 Voice output is a practice aid, not authoritative pitch-accent instruction.
 See [installation](INSTALL.md#speech-options) for build options and

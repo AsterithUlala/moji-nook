@@ -1,0 +1,26 @@
+{
+  "voicevox-core-windows.zip": {
+    "url": "https://github.com/VOICEVOX/voicevox_core/releases/download/0.17.0/voicevox_core-windows-x64-0.17.0.zip",
+    "sha256": "5a116b73fe338d36e63ae651279246f5968d0866a73780209c5f7b43c9692216"
+  },
+  "voicevox-onnxruntime-windows.tgz": {
+    "url": "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-1.17.3/voicevox_onnxruntime-win-x64-1.17.3.tgz",
+    "sha256": "32b07e7c6c59030434b54eb0255912510942faf193c7a14e0e1a168db5796265"
+  },
+  "open-jtalk-dictionary.tar.gz": {
+    "url": "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz",
+    "sha256": "fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a"
+  },
+  "voicevox-0.vvm": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/0.vvm",
+    "sha256": "917e592cae92a02fb7668bd9e168df4e39c8ab2f5302c2be71906c70ec4e2df2"
+  },
+  "voicevox-vvm-TERMS.txt": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/TERMS.txt",
+    "sha256": "57fc18afeebc8a08c303b2b4e3f05bf6453a37c482d17c04ec3fbc674e5fc5f4"
+  },
+  "voicevox-vvm-README.txt": {
+    "url": "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.16.4/README.txt",
+    "sha256": "12a64121db0815fc5e6ea8cdf13cd3ed052b7c7d7a170a70a2c0eced2fc63573"
+  }
+}

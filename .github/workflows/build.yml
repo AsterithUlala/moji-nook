@@ -1,0 +1,252 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  arch:
+    name: Arch Linux package
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git cmake ninja python \
+            qt6-base qt6-multimedia layer-shell-qt hicolor-icon-theme
+      - uses: actions/checkout@v4
+      - name: Build package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          su builder -c "git config --global --add safe.directory '$GITHUB_WORKSPACE' && cd '$GITHUB_WORKSPACE/packaging/arch' && ./build-local.sh --noconfirm"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-arch
+          path: packaging/arch/moji-nook-*.pkg.tar.zst
+
+  appimage:
+    name: Linux AppImage
+    # The oldest supported runner keeps the glibc floor low, so the AppImage
+    # runs on most current distributions.
+    runs-on: ubuntu-22.04
+    env:
+      # LayerShellQt 6.6 adds Window::setScreen, which the overlay uses; it
+      # needs Qt 6.10 and ECM 6.22.
+      ECM_VERSION: v6.22.0
+      LAYER_SHELL_QT_VERSION: v6.6.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build patchelf file libfuse2 xvfb \
+            libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
+            libwayland-dev wayland-protocols libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 libxcb-render-util0 \
+            libxcb-image0 libpulse0 fonts-noto-cjk
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.*"
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtmultimedia qtwaylandcompositor
+          cache: true
+      - name: Build LayerShellQt
+        # Not packaged for Qt 6.8 on Ubuntu; installing into the Qt prefix puts
+        # its Wayland shell plugin where linuxdeploy collects Qt plugins.
+        run: |
+          git clone --depth 1 --branch "$ECM_VERSION" https://invent.kde.org/frameworks/extra-cmake-modules.git ecm
+          cmake -S ecm -B ecm/build -G Ninja -DCMAKE_INSTALL_PREFIX="$QT_ROOT_DIR" -DBUILD_TESTING=OFF -DBUILD_DOC=OFF
+          cmake --install ecm/build
+          git clone --depth 1 --branch "$LAYER_SHELL_QT_VERSION" https://invent.kde.org/plasma/layer-shell-qt.git lsq
+          cmake -S lsq -B lsq/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$QT_ROOT_DIR" -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DBUILD_TESTING=OFF
+          cmake --build lsq/build
+          cmake --install lsq/build
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_INSTALL_PREFIX=/usr -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure
+      - name: Package
+        run: |
+          DESTDIR="$PWD/AppDir" cmake --install build
+          # linuxdeploy rewrites RPATHs; keep the quality worker out of it so it
+          # still finds VOICEVOX next to the speech bundle.
+          mv AppDir/usr/bin/moji-nook-quality-worker worker.tmp
+          base=https://github.com/linuxdeploy
+          curl -fsSLo linuxdeploy $base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fsSLo linuxdeploy-plugin-qt $base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+          # Only SQLite is used; other drivers pull in client libraries we do not ship.
+          find "$QT_ROOT_DIR/plugins/sqldrivers" -type f ! -name libqsqlite.so -delete
+          export LD_LIBRARY_PATH="$QT_ROOT_DIR/lib:$QT_ROOT_DIR/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          # Qt 6.10 may ship one merged Wayland plugin; deploy whichever exist.
+          export EXTRA_PLATFORM_PLUGINS=$(cd "$QT_ROOT_DIR/plugins/platforms" && ls libqwayland*.so | paste -sd';')
+          echo "Wayland platform plugins: $EXTRA_PLATFORM_PLUGINS"
+          export EXTRA_QT_MODULES="waylandclient"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          ./linuxdeploy --appdir AppDir --plugin qt \
+            --desktop-file AppDir/usr/share/applications/moji-nook.desktop \
+            --icon-file assets/brand/moji-nook-256.png --icon-filename moji-nook
+          ls AppDir/usr/plugins/platforms AppDir/usr/plugins/wayland-shell-integration
+          test -f AppDir/usr/plugins/wayland-shell-integration/liblayer-shell.so
+          mv worker.tmp AppDir/usr/bin/moji-nook-quality-worker
+          patchelf --set-rpath '$ORIGIN/../share/moji-nook/speech/quality/lib:$ORIGIN/../lib' \
+            AppDir/usr/bin/moji-nook-quality-worker
+          ./linuxdeploy --appdir AppDir --output appimage
+          mkdir -p dist
+          mv Moji_Nook-*.AppImage dist/moji-nook-x86_64.AppImage
+      - name: Smoke test AppImage
+        run: |
+          cd dist
+          ./moji-nook-x86_64.AppImage --appimage-extract >/dev/null
+          root="$PWD/squashfs-root"
+          # Quality speech: the worker must load VOICEVOX from inside the bundle.
+          request='{"id":1,"text":"にほんご","style":2,"rate":1.0,"path":"'"$PWD"'/quality.wav"}'
+          echo "$request" | "$root/usr/bin/moji-nook-quality-worker" --bundle "$root/usr/share/moji-nook/speech" | tee worker.json
+          grep -q '"ok":true' worker.json
+          test "$(stat -c %s quality.wav)" -gt 44
+          # Fast speech: Open JTalk runs from the bundle with its own HTS Engine.
+          echo にほんご | LD_LIBRARY_PATH="$root/usr/share/moji-nook/speech/lib" \
+            "$root/usr/share/moji-nook/speech/bin/open_jtalk" \
+            -x "$root/usr/share/moji-nook/speech/dictionary" \
+            -m "$root/usr/share/moji-nook/speech/voices/mei.htsvoice" -ow fast.wav
+          test "$(stat -c %s fast.wav)" -gt 44
+          # The packaged app renders its UI through the bundled xcb plugin.
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 120 xvfb-run -a ./moji-nook-x86_64.AppImage \
+            --data-dir "$RUNNER_TEMP/profile" --preview "$PWD/screenshots"
+          ls screenshots | head
+          rm -rf squashfs-root
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-appimage
+          path: dist/moji-nook-x86_64.AppImage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-screenshots
+          path: dist/screenshots
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            # QtTest output can be lost under ctest on Windows; rerun failures to a log.
+            foreach ($test in Get-ChildItem build/moji_nook_*_tests.exe) {
+              $log = Join-Path $env:RUNNER_TEMP "$($test.BaseName).txt"
+              & $test.FullName -platform offscreen -o "$log,txt"
+              if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String -NotMatch '^PASS' }
+            }
+            exit 1
+          }
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "dist/moji-nook"
+          cmake --install build --prefix $out
+          windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw "$out/moji-nook.exe"
+          # Ship the MSVC runtime so users do not need the VC++ redistributable.
+          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64/Microsoft.VC*.CRT/*.dll"
+          if (-not $crt) { throw "MSVC runtime DLLs not found under $env:VCToolsRedistDir" }
+          $crt | Copy-Item -Destination $out
+          Remove-Item "$out/vc_redist.x64.exe" -ErrorAction Ignore
+          # Only SQLite is used; the other drivers need client libraries we do not ship.
+          Get-ChildItem "$out/sqldrivers" -Exclude qsqlite.dll | Remove-Item
+          Copy-Item LICENSE "$out/LICENSE.txt"
+          Copy-Item README.md "$out/README.md"
+      - name: Smoke test packaged app
+        shell: pwsh
+        run: |
+          # Run from the deployed folder with only system DLLs on PATH, so a
+          # missing DLL or plugin fails here instead of on a user's machine.
+          $dist = Resolve-Path "dist/moji-nook"
+          $env:PATH = "$dist\speech\quality\lib;C:\Windows\System32;C:\Windows"
+          $wav = Join-Path $env:RUNNER_TEMP "quality.wav"
+          $request = '{"id":1,"text":"\u306b\u307b\u3093\u3054","style":2,"rate":1.0,"path":"' + ($wav -replace '\\','/') + '"}'
+          $response = $request | & "$dist\moji-nook-quality-worker.exe" --bundle "$dist\speech"
+          Write-Output $response
+          if (-not ($response -match '"ok":true') -or (Get-Item $wav).Length -le 44) { throw "Quality speech failed" }
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          $shots = "$PWD/dist/screenshots"
+          $p = Start-Process "$dist\moji-nook.exe" -ArgumentList "--data-dir", "`"$env:RUNNER_TEMP\profile`"", "--preview", "`"$shots`"" -PassThru -NoNewWindow
+          $null = $p.Handle # keep the handle so ExitCode is readable afterwards
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "moji-nook.exe --preview timed out" }
+          if ($p.ExitCode -ne 0) { throw "moji-nook.exe --preview exited with $($p.ExitCode)" }
+          Get-ChildItem $shots | Select-Object -First 10
+      - name: Archive
+        shell: pwsh
+        run: Compress-Archive -Path dist/moji-nook -DestinationPath dist/moji-nook-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/moji-nook-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-screenshots
+          path: dist/screenshots
+          if-no-files-found: ignore
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [arch, appimage, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: cd dist && sha256sum * | tee SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          body_path: packaging/release-notes.md
+          files: dist/*

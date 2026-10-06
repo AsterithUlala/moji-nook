@@ -1,8 +1,8 @@
 # Install Moji Nook
 
-Moji Nook is an early alpha (0.1.0). Arch Linux users can install the prebuilt
-package from the [releases page](https://github.com/AsterithUlala/moji-nook/releases);
-everyone else builds from source. Build commands below start from the repository
+Moji Nook is an early alpha (0.1.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
+has an Arch package, an AppImage for other Linux distributions, and an
+experimental Windows zip. You can also build from source. Build commands below start from the repository
 directory after cloning.
 
 ## Install the Arch package
@@ -33,6 +33,23 @@ This requires Arch Linux's `makepkg` and the build dependencies below. The scrip
 packages the committed `HEAD`, not uncommitted edits, and leaves
 `moji-nook-*.pkg.tar.zst` in `packaging/arch/`.
 
+## Install the AppImage
+
+For Linux distributions other than Arch. The AppImage bundles Qt 6.8,
+LayerShellQt, and both offline speech engines, and needs glibc 2.35 or newer
+(Ubuntu 22.04, Debian 12, Fedora 36, or later).
+
+```sh
+chmod +x moji-nook-x86_64.AppImage
+./moji-nook-x86_64.AppImage --demo
+```
+
+AppImages need FUSE 2. If it reports a FUSE error, install `libfuse2`
+(`libfuse2t64` on Ubuntu 24.04 and later), or run it with
+`--appimage-extract-and-run`. To add it to your launcher, use a tool such as
+Gear Lever or AppImageLauncher. To remove it, quit the app and delete the file;
+your practice profile stays in place.
+
 ## Platform support
 
 The tested target is **Linux x86_64, KDE Plasma on Wayland**, using CachyOS/Arch.
@@ -44,10 +61,10 @@ Linux builds require LayerShellQt. Bundled Japanese speech is currently prepared
 only for Linux x86_64. On other architectures, build without bundled speech and
 treat the port as unvalidated.
 
-Windows has always-on-top support in the source and excludes LayerShellQt, but
-compilation, runtime behavior, and packaging have not been validated. macOS has
-no validated build or overlay behavior. These platforms are development targets,
-not supported installer options today.
+Windows x64 builds compile and pass the test suite in CI, and a portable zip is
+published with each release (see [Windows](#windows-experimental)). Desktop
+behavior on Windows has not had a hands-on release pass. macOS has no validated
+build or overlay behavior and is a development target only.
 
 ## Requirements
 
@@ -194,10 +211,37 @@ settings, the output device, and the system mixer. Voice and feedback-tone volum
 are separate. For an installed build, verify that its speech helper and asset
 directories were installed too. Missing audio does not prevent practice.
 
-## Windows development builds
+## Windows (experimental)
 
-Install Qt 6.5+ with the components listed above, CMake, Ninja, and a supported
-C++ compiler. Configure without both speech bundles. Qt's `windeployqt` can
-collect runtime dependencies, including the SQLite and Multimedia plugins,
-but this repository has no tested Windows distribution procedure. Native speech
-bundles, fullscreen behavior, and credential storage need a Windows release pass.
+[`.github/workflows/build.yml`](../.github/workflows/build.yml) builds the zip
+with MSVC and Qt 6.8 and runs the test suite on every push; a `v*` tag attaches
+it, with the Linux packages, to a GitHub release.
+
+The zip is portable: extract it anywhere and run `moji-nook.exe`. It bundles Qt,
+the MSVC runtime, and the Quality speech engine, so nothing else needs to be
+installed. Practice data lives
+in `%LOCALAPPDATA%\MojiNook\Moji Nook`. To remove Moji Nook, quit it from the
+tray and delete the extracted folder.
+
+Known limits:
+
+- **Quality voices only.** VOICEVOX neural voices are included; the Fast
+  (Open JTalk) voices are Linux-only for now.
+- **Overlay behavior is untested by hand.** Cards use a topmost window that
+  should not take focus, but fullscreen games and exclusive-fullscreen apps
+  may cover it.
+- **Unsigned.** Windows SmartScreen may warn on first launch; choose
+  **More info → Run anyway**.
+- **Token storage.** The WaniKani token is a plaintext file in your profile
+  directory, protected by your account's application-data permissions rather
+  than Windows Credential Manager. See [storage](USAGE.md#storage-backups-and-privacy).
+
+To build locally, install Qt 6.5+ (with Multimedia), CMake, Ninja, Python 3.12+,
+and Visual Studio's C++ tools, then from a *Developer PowerShell*:
+
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMOJI_NOOK_BUILD_TREE_SPEECH=OFF
+cmake --build build
+cmake --install build --prefix dist
+windeployqt --release dist\moji-nook.exe
+```

@@ -162,9 +162,11 @@ private slots:
     speech.say("おはようございます", "old-neural-card");
     QTest::qWait(100); // Cancel during real model startup/inference.
     speech.stop();
-    speech.configure(true, "mei", 35, 1., "fast");
-    speech.say("ねこ", "new-fast-card");
-    QTRY_COMPARE_WITH_TIMEOUT(generated.count(), 1, 10000);
+    // Windows bundles only Quality; cancel into another neural speaker there.
+    const bool fast = speech.available("fast");
+    speech.configure(true, fast ? "mei" : "tsumugi", 35, 1., fast ? "fast" : "quality");
+    speech.say("ねこ", "new-card");
+    QTRY_COMPARE_WITH_TIMEOUT(generated.count(), 1, 30000);
     QTest::qWait(1500);
     QCOMPARE(generated.count(), 1);
     QCOMPARE(errors.count(), 0);
