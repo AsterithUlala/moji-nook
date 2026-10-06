@@ -123,11 +123,14 @@ jobs:
           cd dist
           ./moji-nook-x86_64.AppImage --appimage-extract >/dev/null
           root="$PWD/squashfs-root"
-          # Quality speech: the worker must load VOICEVOX from inside the bundle.
-          request='{"id":1,"text":"にほんご","style":2,"rate":1.0,"path":"'"$PWD"'/quality.wav"}'
-          echo "$request" | "$root/usr/bin/moji-nook-quality-worker" --bundle "$root/usr/share/moji-nook/speech" | tee worker.json
-          grep -q '"ok":true' worker.json
-          test "$(stat -c %s quality.wav)" -gt 44
+          # Quality speech: the worker must load each VOICEVOX model from inside the bundle.
+          for style in 109 11 12; do
+            request='{"id":1,"text":"にほんご","style":'$style',"rate":1.0,"path":"'"$PWD"'/quality.wav"}'
+            echo "$request" | "$root/usr/bin/moji-nook-quality-worker" --bundle "$root/usr/share/moji-nook/speech" | tee worker.json
+            grep -q '"ok":true' worker.json
+            test "$(stat -c %s quality.wav)" -gt 44
+            rm quality.wav
+          done
           # Fast speech: Open JTalk runs from the bundle with its own HTS Engine.
           echo にほんご | LD_LIBRARY_PATH="$root/usr/share/moji-nook/speech/lib" \
             "$root/usr/share/moji-nook/speech/bin/open_jtalk" \
@@ -208,11 +211,14 @@ jobs:
           # missing DLL or plugin fails here instead of on a user's machine.
           $dist = Resolve-Path "dist/moji-nook"
           $env:PATH = "$dist\speech\quality\lib;C:\Windows\System32;C:\Windows"
-          $wav = Join-Path $env:RUNNER_TEMP "quality.wav"
-          $request = '{"id":1,"text":"\u306b\u307b\u3093\u3054","style":2,"rate":1.0,"path":"' + ($wav -replace '\\','/') + '"}'
-          $response = $request | & "$dist\moji-nook-quality-worker.exe" --bundle "$dist\speech"
-          Write-Output $response
-          if (-not ($response -match '"ok":true') -or (Get-Item $wav).Length -le 44) { throw "Quality speech failed" }
+          # One style from each bundled VOICEVOX model.
+          foreach ($style in 109, 11, 12) {
+            $wav = Join-Path $env:RUNNER_TEMP "quality-$style.wav"
+            $request = '{"id":1,"text":"\u306b\u307b\u3093\u3054","style":' + $style + ',"rate":1.0,"path":"' + ($wav -replace '\\','/') + '"}'
+            $response = $request | & "$dist\moji-nook-quality-worker.exe" --bundle "$dist\speech"
+            Write-Output $response
+            if (-not ($response -match '"ok":true') -or (Get-Item $wav).Length -le 44) { throw "Quality speech failed for style $style" }
+          }
           $env:PATH = "C:\Windows\System32;C:\Windows"
           $shots = "$PWD/dist/screenshots"
           $p = Start-Process "$dist\moji-nook.exe" -ArgumentList "--data-dir", "`"$env:RUNNER_TEMP\profile`"", "--preview", "`"$shots`"" -PassThru -NoNewWindow
