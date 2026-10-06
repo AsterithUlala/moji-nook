@@ -93,6 +93,8 @@ jobs:
           curl -fsSLo linuxdeploy $base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           curl -fsSLo linuxdeploy-plugin-qt $base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy linuxdeploy-plugin-qt
+          # Only SQLite is used; other drivers pull in client libraries we do not ship.
+          find "$QT_ROOT_DIR/plugins/sqldrivers" -type f ! -name libqsqlite.so -delete
           export LD_LIBRARY_PATH="$QT_ROOT_DIR/lib:$QT_ROOT_DIR/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
           export QMAKE="$QT_ROOT_DIR/bin/qmake"
           # Qt 6.10 may ship one merged Wayland plugin; deploy whichever exist.
