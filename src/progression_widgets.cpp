@@ -47,12 +47,13 @@ QString subjectName(const ProgressTile &tile) {
 }
 
 WordTileCanvas::WordTileCanvas(QWidget *parent) : QWidget(parent) {
+  // Install before anything caches a generic accessible for this widget.
+  installWordTileAccessibility();
   setObjectName("wordTileCanvas");
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
   setAccessibleName(tr("Japanese word tile composition"));
-  installWordTileAccessibility();
   settlement_.setParent(this);
   settlement_.setObjectName("settleMotion");
   settlement_.setStartValue(0.0);
@@ -530,7 +531,6 @@ ProgressionPage::ProgressionPage(QWidget *parent) : QWidget(parent) {
   empty_->setObjectName("wordTilesEmpty");
   empty_->setWordWrap(true);
   empty_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-  empty_->setContentsMargins(20, 18, 20, 18);
   canvas_ = new WordTileCanvas(body);
   bodyLayout->addWidget(empty_);
   bodyLayout->addWidget(canvas_);
@@ -590,7 +590,7 @@ void ProgressionPage::setTheme(int theme) {
   results_->setStyleSheet(QString("font-size:14px; color:%1; background:transparent;").arg(c.muted));
   const QColor surface(c.surface);
   const QString wash = QString("rgba(%1,%2,%3,26)").arg(surface.red()).arg(surface.green()).arg(surface.blue());
-  empty_->setStyleSheet(QString("font-size:16px; color:%1; background:%2; border:none; border-radius:8px;").arg(c.text, wash));
+  empty_->setStyleSheet(QString("font-size:16px; color:%1; background:%2; border:none; border-radius:8px; padding:18px 20px;").arg(c.text, wash));
   scroll_->setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background:transparent; border:none; }");
   canvas_->setTheme(theme_);
 }

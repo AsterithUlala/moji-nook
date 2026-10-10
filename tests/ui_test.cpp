@@ -2237,6 +2237,31 @@ private slots:
     QCOMPARE(n, 2);
     QCOMPARE(last, -1);
   }
+  void nextCardIgnoresTrailingClick() {
+    Card card;
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Choice;
+    c.reading = true;
+    c.choices = {"にほん", "ほんじつ", "まいにち", "きゅうじつ"};
+    c.event = {{"session_id", "bounce"}, {"session_position", 1}, {"session_total", 2}};
+    card.present(c, 5);
+    QSignalSpy graded(&card, &Card::graded);
+    c.event["session_position"] = 2;
+    // The next card replaces a visible one, as after "Next · 1 of 2".
+    card.present(c, 5);
+    QPushButton *choice = nullptr;
+    for (auto *button : card.findChildren<QPushButton *>())
+      if (button->property("answer").isValid())
+        choice = button;
+    QVERIFY(choice);
+    QVERIFY(card.isVisible());
+    QTest::mouseClick(choice, Qt::LeftButton);
+    QCOMPARE(graded.count(), 0);
+    QTest::qWait(400);
+    QTest::mouseClick(choice, Qt::LeftButton);
+    QCOMPARE(graded.count(), 1);
+  }
   void typingWaitsForDone() {
     Card card;
     Challenge c;

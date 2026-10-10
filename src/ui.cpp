@@ -49,6 +49,9 @@ App::App(Store &s, const QString &path, QObject *parent)
     if (ok) {
       refreshPool();
       invalidateStats();
+      // Anki-only first use starts with an empty pool and no running interval.
+      if (!pool.isEmpty() && !clock.pending && !clock.timer.isActive())
+        clock.request();
     }
   });
   connect(ankiPanel, &AnkiPanel::previewRequested, this, [this] {
@@ -357,6 +360,7 @@ void App::snoozePractice() {
   pauseAction->setChecked(false);
   card.close();
   clock.timer.start(snoozeMinutes * 60000);
+  clock.snoozed = true;
   refreshHomeState();
 }
 void App::refreshSnoozeLabels() {
@@ -472,9 +476,11 @@ void App::syncIfDue() {
 void App::showCard() {
   ++recapEpoch;
   recap.dismiss();
+  previewCard.hide(); // The real card takes the sample's place.
   PerformanceSpan timing("select-and-present-card");
   if (pool.isEmpty()) {
-    clock.pending = false;
+    // Keep the interval running so reminders resume once words arrive.
+    clock.complete();
     card.hide();
     status->setText("No learned items cached for your chosen source. "
                     "Open Settings to connect and sync it.");

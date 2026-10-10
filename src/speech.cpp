@@ -114,6 +114,9 @@ void JapaneseSpeech::say(const QString &kanaText, const QString &utteranceKey) {
   // ambiguous kanji being interpreted as the wrong word by a dictionary.
   const auto text = kanaText.normalized(QString::NormalizationForm_KC).trimmed();
   if (text.size() > 240) {
+    // Track the key so the card that asked can show the error.
+    currentKey = utteranceKey;
+    currentText.clear();
     emit error("Pronunciation is limited to short practice words and phrases.");
     return;
   }

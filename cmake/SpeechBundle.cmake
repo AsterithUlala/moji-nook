@@ -4,6 +4,8 @@ if(MOJI_NOOK_BUNDLE_SPEECH AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYST
   set(MOJI_NOOK_SPEECH_BUNDLE "${CMAKE_BINARY_DIR}/speech")
   file(SHA256 "${CMAKE_SOURCE_DIR}/scripts/speech-assets.json" speech_manifest_sha)
   file(SHA256 "${CMAKE_SOURCE_DIR}/scripts/setup_speech.py" speech_setup_sha)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/scripts/speech-assets.json" "${CMAKE_SOURCE_DIR}/scripts/setup_speech.py")
   set(speech_expected_stamp "${speech_manifest_sha}\n${speech_setup_sha}")
   set(speech_bundle_valid TRUE)
   if(EXISTS "${MOJI_NOOK_SPEECH_BUNDLE}/.complete")

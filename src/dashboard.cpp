@@ -255,7 +255,7 @@ void App::buildDashboard() {
   connect(interval, &QSpinBox::valueChanged, this, [this](int n) {
     clock.intervalMs = n * 60000;
     settings.setValue("interval_minutes", n);
-    if (clock.timer.isActive())
+    if (clock.timer.isActive() && !clock.snoozed)
       clock.timer.start(clock.intervalMs);
   });
   sessionCount = new ScrollSafeSpinBox;
@@ -336,6 +336,9 @@ void App::buildDashboard() {
   });
   card.setMonitor(settings.value("monitor").toString());
   previewCard.setMonitor(settings.value("monitor").toString());
+  // Apply the saved corner before the first card is shown, not after.
+  card.setCorner(corner->currentIndex());
+  previewCard.setCorner(corner->currentIndex());
   auto *placementActions = new QHBoxLayout;
   auto *identify = button("Identify displays", "quiet");
   identify->setObjectName("identifyDisplays");
@@ -823,7 +826,7 @@ void App::buildDashboard() {
   recentHeading->addWidget(label("Recent practice", "controlHeading"));
   auto *progressLink = button("Explore your progress", "quiet");
   connect(progressLink, &QPushButton::clicked, this, [this] { tabs->setCurrentIndex(1); });
-  recentHeading->addWidget(progressLink);
+  recentHeading->addWidget(progressLink, 0, Qt::AlignLeft);
   recentHeading->addStretch();
   recentLayout->addLayout(recentHeading, 1);
   stats->setObjectName("homeStats");

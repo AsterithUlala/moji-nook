@@ -172,7 +172,11 @@ void App::applySpeechSettings() {
   const bool autoplay = settings.value("speech/autoplay", true).toBool();
   const bool recorded = settings.value("speech/prefer_recorded", false).toBool();
   const auto defaultEngine = speech.available("quality") ? "quality" : "fast";
-  const auto engine = settings.value("speech/engine", defaultEngine).toString();
+  auto engine = settings.value("speech/engine", defaultEngine).toString();
+  // The settings page shows the other engine when the saved one is missing.
+  const auto other = engine == "fast" ? "quality" : "fast";
+  if (!speech.available(engine) && speech.available(other))
+    engine = other;
   const auto voice = settings.value("speech/voice_" + engine,
       engine == "fast" ? settings.value("speech/voice", "random") : QVariant("random")).toString();
   speech.configure(enabled, voice, volume,
