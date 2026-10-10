@@ -7,6 +7,7 @@ PracticeClock::PracticeClock(QObject *parent) : QObject(parent) {
 void PracticeClock::request() {
   if (paused || pending)
     return;
+  snoozed = false;
   timer.stop();
   pending = true;
   sessionTotal = qBound(1, sessionSize, maxSessionSize);
@@ -26,11 +27,13 @@ void PracticeClock::advance() {
 }
 void PracticeClock::complete() {
   pending = false;
+  snoozed = false;
   if (!paused)
     timer.start(intervalMs);
 }
 void PracticeClock::setPaused(bool value) {
   paused = value;
+  snoozed = false;
   if (paused)
     timer.stop();
   else if (!pending)

@@ -134,14 +134,21 @@ Card::Card(QWidget *parent)
   auto *submittedGroup = new QVBoxLayout(submittedRow);
   submittedGroup->setContentsMargins(0, 0, 0, 0);
   submittedGroup->setSpacing(4);
-  submittedGroup->addWidget(label("Incorrect", "muted"));
+  auto *submittedCaption = label("Incorrect", "muted");
+  submittedCaption->setAlignment(Qt::AlignCenter);
+  submittedGroup->addWidget(submittedCaption);
+  // Centered like the correct-answer row below so the two read as a pair.
   auto *submittedLayout = new QHBoxLayout;
   submittedGroup->addLayout(submittedLayout);
   submitted = label({}, "submittedAnswer");
   missIcon = new FeedbackIconLabel(submitted);
   missIcon->setAccessibleName("Incorrect answer");
+  submittedLayout->addStretch();
   submittedLayout->addWidget(missIcon, 0, Qt::AlignVCenter);
-  submittedLayout->addWidget(submitted, 1);
+  submittedLayout->addWidget(submitted);
+  submittedLayout->addItem(new QSpacerItem(28, 0, QSizePolicy::Fixed,
+                                           QSizePolicy::Minimum));
+  submittedLayout->addStretch();
   layout->addWidget(submittedRow);
   answerCaption = label("Correct answer", "muted");
   answerCaption->setAlignment(Qt::AlignCenter);
@@ -391,6 +398,11 @@ void Card::setCorner(int index) {
   }
 }
 void Card::present(const Challenge &c, int minutes) {
+  // Only a card replacing a visible one sits under a still-clicking pointer.
+  if (isVisible())
+    presented.start();
+  else
+    presented.invalidate();
   if (speech)
     speech->stop();
   answerVisible = false;
@@ -574,6 +586,13 @@ bool Card::eventFilter(QObject *watched, QEvent *event) {
   if (watched == cardContent && event->type() == QEvent::LayoutRequest) {
     QTimer::singleShot(0, this, &Card::fitCard);
   }
+  // A double-click on "Next" must not answer the card that replaces it.
+  if ((event->type() == QEvent::MouseButtonPress ||
+       event->type() == QEvent::MouseButtonDblClick) &&
+      event->spontaneous() && watched != dismiss &&
+      qobject_cast<QAbstractButton *>(watched) && presented.isValid() &&
+      presented.elapsed() < 350)
+    return true;
   if (pending && event->type() == QEvent::MouseButtonPress &&
       watched != dismiss && watched->objectName() != "cardBrand") {
 #ifdef MOJI_NOOK_LAYER_SHELL

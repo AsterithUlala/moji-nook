@@ -22,6 +22,8 @@ public:
   int sessionSize = 2, sessionTotal = 2, position = 1;
   QString sessionId;
   bool pending = false, paused = false;
+  // The running timer is a snooze, not the regular interval.
+  bool snoozed = false;
   void request();
   void complete();
   void advance();
@@ -69,7 +71,7 @@ private:
   QWidget *cardContent, *submittedRow;
   QWidget *choiceArea;
   QVBoxLayout *choiceLayout;
-  QElapsedTimer active;
+  QElapsedTimer active, presented;
   bool engaged = false, resolved = false, pending = false;
   bool grantingClickFocus = false;
   int result = -1, cornerIndex = 0, themeIndex = defaultTheme;
@@ -223,7 +225,11 @@ protected:
 };
 class ScrollSafeSpinBox : public QSpinBox {
 public:
-  using QSpinBox::QSpinBox;
+  explicit ScrollSafeSpinBox(QWidget *parent = nullptr) : QSpinBox(parent) {
+    // Style sheet padding does not reach the inner editor; inset the text
+    // to line up with the neighboring combo boxes.
+    lineEdit()->setTextMargins(7, 0, 0, 0);
+  }
 
 protected:
   void wheelEvent(QWheelEvent *event) override { event->ignore(); }

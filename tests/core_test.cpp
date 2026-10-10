@@ -175,10 +175,19 @@ private slots:
     QVERIFY(e.contains("utc_offset_seconds"));
     QVERIFY(e.contains("completed_at"));
     QCOMPARE(e["session_position"].toInt(), 2);
+    c.subject.id = -7;
+    c.subject.characters = "=SUM(A1)";
+    c.event["graded_local_day"] = "2026-01-02";
+    QVERIFY(store.record(c, false, 900));
+    QVERIFY(q.exec("SELECT local_day FROM attempts ORDER BY id DESC LIMIT 1"));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toString(), QString("2026-01-02"));
     QVERIFY(store.exportCsv(dir.path() + "/events.csv"));
     QFile f(dir.path() + "/events.csv");
     QVERIFY(f.open(QIODevice::ReadOnly));
-    QVERIFY(f.readAll().contains("event_json"));
+    const auto csv = f.readAll();
+    QVERIFY(csv.contains("event_json"));
+    QVERIFY(csv.contains("\n\"-7\",\"'=SUM(A1)\""));
   }
   void kana() {
     QCOMPARE(toKana("gakkou"), QString("がっこう"));

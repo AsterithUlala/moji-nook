@@ -72,7 +72,9 @@ bool Store::record(const Challenge &c, std::optional<bool> correct,
   q.addBindValue(correct ? QVariant(*correct ? 1 : 0) : QVariant());
   q.addBindValue(activeMs);
   q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
-  q.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+  // Count the attempt on the day it was graded, matching progression.
+  const QDate graded = QDate::fromString(c.event["graded_local_day"].toString(), Qt::ISODate);
+  q.addBindValue((graded.isValid() ? graded : QDate::currentDate()).toString(Qt::ISODate));
   QJsonObject event = c.event;
   const auto local = QDateTime::currentDateTime();
   event["schema_version"] = 2;
@@ -159,7 +161,9 @@ bool Store::exportCsv(const QString &path) const {
       if (i)
         out << ',';
       QString text = q.value(i).toString();
-      if (!text.isEmpty() && QString("=+-@\t\r\n").contains(text.front()))
+      bool numeric = false;
+      text.toLongLong(&numeric); // Negative Anki subject IDs stay numbers.
+      if (!numeric && !text.isEmpty() && QString("=+-@\t\r\n").contains(text.front()))
         text.prepend('\''); // Spreadsheet formula injection protection.
       text.replace('"', "\"\"");
       out << '"' << text << '"';

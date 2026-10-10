@@ -21,6 +21,8 @@ if(MOJI_NOOK_BUNDLE_QUALITY_SPEECH AND quality_speech_supported)
   endif()
   file(SHA256 "${CMAKE_SOURCE_DIR}/scripts/${quality_manifest}" quality_manifest_sha)
   file(SHA256 "${CMAKE_SOURCE_DIR}/scripts/setup_quality_speech.py" quality_setup_sha)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/scripts/${quality_manifest}" "${CMAKE_SOURCE_DIR}/scripts/setup_quality_speech.py")
   set(quality_expected_stamp "${quality_manifest_sha}\n${quality_setup_sha}")
   set(quality_bundle_valid TRUE)
   if(EXISTS "${MOJI_NOOK_QUALITY_SPEECH_BUNDLE}/.complete")

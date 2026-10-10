@@ -390,7 +390,8 @@ void InsightsBrowser::render() {
                            const QVector<int> &correct) {
     panel = "<h2>" + title + "</h2><p>" + subtitle + "</p>";
     chart(id, 290, [&](QPainter &p) {
-      const double step = 258.0 / labels.size();
+      // Short lists keep the practice-mix row rhythm instead of spreading out.
+      const double step = qMin(54.0, 258.0 / labels.size());
       for (int i = 0; i < labels.size(); ++i) {
         const double y = 12 + i * step;
         label(p, QRectF(16, y, width - 32, 22), labels[i]);
@@ -427,7 +428,8 @@ void InsightsBrowser::render() {
                 "WaniKani stage at practice · correct / answered",
                 {"Apprentice", "Guru", "Master", "Enlightened", "Burned"},
                 data.stageTotal, data.stageCorrect);
-  html += "<table cellspacing='12' cellpadding='0'>";
+  // Pull the table left by its cell spacing so panels align with the heading.
+  html += "<table cellspacing='12' cellpadding='0' style='margin-left:-12px'>";
   for (int i = 0; i < panels.size(); ++i) {
     if (i % columns == 0)
       html += "<tr>";

@@ -291,7 +291,9 @@ void AnkiDetails::setSubject(const Subject &s) {
   QStringList lines;
   japanese->setText(s.contextJa);
   japanese->setVisible(!s.contextJa.isEmpty());
-  japanese->setToolTip(s.sourceData["sentence_furigana"].toString());
+  const auto furigana = s.sourceData["sentence_furigana"].toString();
+  // Tooltips auto-detect rich text; escape deck text so it shows literally.
+  japanese->setToolTip(furigana.isEmpty() ? QString() : "<p>" + furigana.toHtmlEscaped() + "</p>");
   translation->setText(s.contextEn);
   translation->setVisible(!s.contextEn.isEmpty());
   static_cast<PitchDiagram *>(pitch)->data = s.sourceData["pitch"].toObject();
