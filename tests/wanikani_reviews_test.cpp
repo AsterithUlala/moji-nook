@@ -299,6 +299,18 @@ private slots:
     const auto katakana = subject("vocabulary", {"Bread"}, {"パン"});
     QCOMPARE(reading(katakana, "pan"), ReviewVerdict::Correct);
   }
+  void nonKanaInReadingAsksAgain() {
+    const auto s = subject("vocabulary", {"Feeling"}, {"かん"});
+    for (const auto text : {"か ん", "かん。", "kan1", "かん!", "感"}) {
+      const auto check = checkReviewAnswer(s, true, text);
+      QVERIFY2(check.verdict == ReviewVerdict::Retry, text);
+      QCOMPARE(check.hint, QString("Type the reading in kana."));
+    }
+    QCOMPARE(reading(s, "  かん "), ReviewVerdict::Correct);
+    QCOMPARE(reading(s, "けん"), ReviewVerdict::Incorrect);
+    QCOMPARE(reading(subject("vocabulary", {"Cake"}, {"ケーキ"}), "ke-ki"),
+             ReviewVerdict::Correct);
+  }
   void kanjiOtherReadingAsksForWantedType() {
     auto s = subject("kanji", {"Person"}, {"じん", "にん"});
     s.readingKind = "onyomi";

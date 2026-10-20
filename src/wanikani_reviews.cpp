@@ -13,11 +13,14 @@ bool hasJapanese(const QString &text) {
   }
   return false;
 }
-bool hasLatin(const QString &text) {
-  for (const QChar c : text)
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-      return true;
-  return false;
+bool onlyKana(const QString &text) {
+  for (const QChar c : text) {
+    const ushort u = c.unicode();
+    if (!((u >= 0x3041 && u <= 0x309f) || (u >= 0x30a1 && u <= 0x30fa) ||
+          (u >= 0x30fc && u <= 0x30ff)))
+      return false;
+  }
+  return true;
 }
 int distance(const QString &a, const QString &b) {
   QVector<int> row(b.size() + 1);
@@ -104,7 +107,7 @@ ReviewCheck checkReviewAnswer(const Subject &subject, bool reading,
     return {ReviewVerdict::Incorrect, {}};
   }
   const auto kana = toKana(text);
-  if (hasLatin(kana))
+  if (!onlyKana(kana))
     return {ReviewVerdict::Retry, "Type the reading in kana."};
   for (const auto &r : subject.readings)
     if (kana == toKana(r))
