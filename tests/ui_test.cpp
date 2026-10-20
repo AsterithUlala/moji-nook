@@ -2183,6 +2183,11 @@ private slots:
         inked |= qAlpha(shown.pixel(x, y)) > 0 &&
                  QColor(shown.pixel(x, y)).lightness() > 128;
     QVERIFY(inked);
+    // The image's name must not give away the meaning being asked.
+    QCOMPARE(word->accessibleName(), QString("Radical image"));
+    c.subject.characters = "一";
+    card.present(c, 5);
+    QVERIFY(word->accessibleName().isEmpty());
   }
   void wanikaniReviewAnswerIsSavedWhenGraded() {
     QTemporaryDir dir;

@@ -493,6 +493,7 @@ void Card::present(const Challenge &c, int minutes) {
                                          : c.mode == Mode::Choice ? "Choose"
                                                                   : "Recall"));
   characters->setText(c.subject.characters);
+  characters->setAccessibleName({});
   if (c.subject.characters.isEmpty() && !c.subject.picture.isEmpty()) {
     // WaniKani draws image-only radicals in black; ink them in the theme's
     // text color.
@@ -504,7 +505,7 @@ void Card::present(const Challenge &c, int minutes) {
     painter.fillRect(glyph.rect(), QColor(colors(themeIndex).text));
     painter.end();
     characters->setPixmap(glyph);
-    characters->setAccessibleName(c.subject.meaning() + " radical image");
+    characters->setAccessibleName("Radical image");
   }
   // Keep longer vocabulary within the compact card.
   characters->setStyleSheet(QString("font-size:%1px")
