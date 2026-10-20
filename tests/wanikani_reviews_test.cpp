@@ -659,7 +659,7 @@ private slots:
              QByteArray("Bearer test-token"));
   }
   void staleReviewIsNotSubmitted() {
-    // WaniKani moved on (reviewed elsewhere, now due again, or not due yet):
+    // WaniKani moved on (reviewed elsewhere or now due again):
     // the answers given here belong to a review that no longer exists.
     struct Case {
       QString listed, current;
@@ -668,8 +668,7 @@ private slots:
     const QList<Case> cases = {
         {"2026-10-19T09:00:00.000000Z", "2026-10-19T21:00:00.000000Z", false},
         {"2026-10-19T09:00:00.000000Z", "", false},
-        {"2026-10-19T09:00:00.000000Z", "2026-10-19T09:00:00.000000Z", true},
-        {"2099-01-01T00:00:00.000000Z", "2099-01-01T00:00:00.000000Z", false}};
+        {"2026-10-19T09:00:00.000000Z", "2026-10-19T09:00:00.000000Z", true}};
     for (const auto &c : cases) {
       QTemporaryDir dir;
       FakeNetwork network;
@@ -693,6 +692,56 @@ private slots:
       QVERIFY(saved.open(QIODevice::ReadOnly));
       QVERIFY(!saved.readAll().contains("11@"));
     }
+  }
+  void unconfirmedReviewKeepsProgress() {
+    // A slow local clock or a cut-off reply proves nothing about the review.
+    const QList<Response> checks = {
+        current(11, 300, "2099-01-01T00:00:00.000000Z"),
+        {200, "{\"data\":{\"available_at\":\"2099"}};
+    for (const auto &check : checks) {
+      QTemporaryDir dir;
+      FakeNetwork network;
+      network.routes["GET " + api + "/v2/assignments"] = {
+          page({assignment(11, 300, "2099-01-01T00:00:00.000000Z", 1)})};
+      network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
+      network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+      network.routes["GET " + api + "/v2/assignments/11"] = {check};
+      network.routes["POST " + api + "/v2/reviews"] = {{201, "{}"}};
+      WaniKaniReviews reviews(dir.path(), nullptr, &network);
+      QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+      reviews.refresh("test-token");
+      QTRY_COMPARE(refreshed.count(), 1);
+      reviews.answer(*reviews.next(), false);
+      reviews.answer(*reviews.next(), true);
+      QTRY_VERIFY(reviews.retryTimer.isActive());
+      QVERIFY(network.posts().isEmpty());
+      QCOMPARE(reviews.waiting(), 1);
+      QFile saved(dir.path() + "/wanikani_review_progress.json");
+      QVERIFY(saved.open(QIODevice::ReadOnly));
+      QVERIFY(saved.readAll().contains("\"meaning_misses\":1"));
+    }
+  }
+  void oldTokenRejectionDoesNotDenyNewToken() {
+    QTemporaryDir dir;
+    FakeNetwork network;
+    network.routes["GET " + api + "/v2/assignments"] = {
+        page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)})};
+    network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
+    network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {{401, "{}"}};
+    network.routes["POST " + api + "/v2/reviews"] = {{422, "{}"}};
+    WaniKaniReviews reviews(dir.path(), nullptr, &network);
+    QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+    QSignalSpy checked(&reviews, &WaniKaniReviews::accessChecked);
+    reviews.refresh("old-token");
+    QTRY_COMPARE(refreshed.count(), 1);
+    reviews.answer(*reviews.next(), true);
+    reviews.checkAccess("new-token");
+    QTRY_COMPARE(checked.count(), 1);
+    QTest::qWait(50);
+    QCOMPARE(checked.count(), 1);
+    QCOMPARE(checked[0][0].value<WaniKaniReviews::Access>(),
+             WaniKaniReviews::Access::Allowed);
   }
   void progressSurvivesRestart() {
     QTemporaryDir dir;

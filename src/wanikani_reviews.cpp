@@ -286,6 +286,11 @@ void WaniKaniReviews::send(const QUrl &url, std::optional<QByteArray> body,
 }
 
 void WaniKaniReviews::checkAccess(const QString &key) {
+  // Requests made with the previous token must not judge this one.
+  ++session;
+  submitting.clear();
+  loading = false;
+  retryTimer.stop();
   const int probe = ++probeEpoch;
   token = key.trimmed();
   if (token.isEmpty()) {
@@ -633,19 +638,22 @@ void WaniKaniReviews::submitNext() {
   send(QUrl(QString("https://api.wanikani.com/v2/assignments/%1")
                 .arg(item.assignmentId)),
        std::nullopt, [this, item](const Reply &r) {
-         if (r.status == 200 || r.status == 404) {
-           const auto d =
-               QJsonDocument::fromJson(r.body).object()["data"].toObject();
-           const auto at = QDateTime::fromString(d["available_at"].toString(),
-                                                 Qt::ISODateWithMs);
-           if (r.status == 200 && d["available_at"] == item.availableAt &&
-               at.isValid() && at <= QDateTime::currentDateTimeUtc() &&
-               !d["hidden"].toBool()) {
-             post(item);
-             return;
-           }
+         const auto d =
+             QJsonDocument::fromJson(r.body).object()["data"].toObject();
+         const bool current = d["available_at"] == item.availableAt &&
+                              !d["hidden"].toBool();
+         if (r.status == 404 || (!d.isEmpty() && !current)) {
            submitting.clear();
            settle(item.key());
+           return;
+         }
+         // The queue came from WaniKani's own due filter, so a matching but
+         // future time means the local clock is behind; try again later.
+         const auto at = QDateTime::fromString(d["available_at"].toString(),
+                                               Qt::ISODateWithMs);
+         if (r.status == 200 && at.isValid() &&
+             at <= QDateTime::currentDateTimeUtc()) {
+           post(item);
            return;
          }
          submitting.clear();
