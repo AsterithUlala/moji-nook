@@ -1,6 +1,7 @@
 #include "wanikani_reviews.h"
 #include "sync.h"
 #include <QImage>
+#include <QImageReader>
 
 namespace {
 bool hasJapanese(const QString &text) {
@@ -164,25 +165,29 @@ QJsonObject progressEntry(const ReviewItem &item) {
           {"meaning_misses", item.meaningMisses},
           {"reading_misses", item.readingMisses}};
 }
-QUrl pictureUrl(const QJsonArray &images) {
-  QUrl best;
-  int bestGap = INT_MAX;
+// SVG first: WaniKani now answers 403 for many PNG variants. PNG sizes nearest
+// 128 px remain the fallback where Qt lacks its SVG plugin.
+QList<QUrl> pictureUrls(const QJsonArray &images) {
+  QList<QPair<int, QUrl>> ranked;
   for (const auto &v : images) {
     const auto image = v.toObject();
-    if (image["content_type"] != "image/png")
-      continue;
+    const auto type = image["content_type"].toString();
     const int width = image["metadata"]
                           .toObject()["dimensions"]
                           .toString()
                           .section('x', 0, 0)
                           .toInt();
-    const int gap = qAbs(width - 128);
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = QUrl(image["url"].toString());
-    }
+    if (type == "image/png")
+      ranked.append({qAbs(width - 128), QUrl(image["url"].toString())});
+    else if (type == "image/svg+xml")
+      ranked.append({-1, QUrl(image["url"].toString())});
   }
-  return best;
+  std::stable_sort(ranked.begin(), ranked.end(),
+                   [](const auto &a, const auto &b) { return a.first < b.first; });
+  QList<QUrl> urls;
+  for (const auto &r : ranked)
+    urls.append(r.second);
+  return urls;
 }
 } // namespace
 
@@ -383,7 +388,7 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
   }
   QVector<ReviewItem> items;
   QJsonObject kept;
-  QHash<int, QUrl> pictures;
+  QHash<int, QList<QUrl>> pictures;
   for (const auto &v : assignments) {
     const auto d = v.toObject()["data"].toObject();
     ReviewItem item;
@@ -406,7 +411,7 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
         item.subject.picture = path;
       else
         pictures[subjectId] =
-            pictureUrl(resource["data"].toObject()["character_images"].toArray());
+            pictureUrls(resource["data"].toObject()["character_images"].toArray());
     }
     const auto saved = progress[item.key()].toObject();
     item.meaningDone = saved["meaning_done"].toBool();
@@ -432,37 +437,56 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
   loading = false;
   for (auto it = pictures.begin(); it != pictures.end(); ++it)
     fetchPicture(it.key(), it.value());
-  emit refreshed(true, queue.isEmpty()
-                           ? QString("No reviews waiting · practice as usual")
-                           : QString("%1 review%2 waiting")
-                                 .arg(queue.size())
-                                 .arg(queue.size() == 1 ? "" : "s"));
+  emit refreshed(true, waitingText());
   submitNext();
 }
 
-void WaniKaniReviews::fetchPicture(int subjectId, const QUrl &url) {
-  if (url.scheme() != "https" || url.host() != "files.wanikani.com" ||
-      !url.userInfo().isEmpty() || url.port(443) != 443)
+QString WaniKaniReviews::waitingText() const {
+  return queue.isEmpty() ? QString("No reviews waiting · practice as usual")
+                         : QString("%1 review%2 waiting")
+                               .arg(queue.size())
+                               .arg(queue.size() == 1 ? "" : "s");
+}
+
+void WaniKaniReviews::fetchPicture(int subjectId, QList<QUrl> urls) {
+  if (urls.isEmpty())
     return;
+  const QUrl url = urls.takeFirst();
+  if (url.scheme() != "https" || url.host() != "files.wanikani.com" ||
+      !url.userInfo().isEmpty() || url.port(443) != 443) {
+    fetchPicture(subjectId, urls);
+    return;
+  }
   QNetworkRequest request(url);
   request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                        QNetworkRequest::ManualRedirectPolicy);
   request.setTransferTimeout(30000);
   auto *reply = transport->get(request);
-  connect(reply, &QNetworkReply::finished, this, [this, reply, subjectId] {
+  connect(reply, &QNetworkReply::finished, this,
+          [this, reply, subjectId, urls] {
     reply->deleteLater();
-    const auto bytes = reply->readAll();
-    if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() !=
-            200 ||
-        QImage::fromData(bytes).isNull())
-      return;
+    QByteArray bytes = reply->readAll();
+    // Qt's SVG renderer ignores CSS variables; keep their fallback colors.
+    static const QRegularExpression cssVariable(R"(var\(--[\w-]+,\s*([^)]+)\))");
+    if (bytes.trimmed().startsWith('<'))
+      bytes = QString::fromUtf8(bytes).replace(cssVariable, "\\1").toUtf8();
+    QBuffer buffer(&bytes);
+    QImageReader reader(&buffer);
+    reader.setScaledSize(QSize(128, 128));
+    const QImage image =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() ==
+                200
+            ? reader.read()
+            : QImage();
     QDir().mkpath(directory + "/wanikani_radicals");
     const QString path =
         QString("%1/wanikani_radicals/%2.png").arg(directory).arg(subjectId);
-    QSaveFile f(path);
-    if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size() ||
-        !f.commit())
+    QSaveFile file(path);
+    if (image.isNull() || !file.open(QIODevice::WriteOnly) ||
+        !image.save(&file, "PNG") || !file.commit()) {
+      fetchPicture(subjectId, urls);
       return;
+    }
     for (auto &item : queue)
       if (item.subject.id == subjectId)
         item.subject.picture = path;

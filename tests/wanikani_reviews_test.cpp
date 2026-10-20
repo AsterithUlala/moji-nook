@@ -591,6 +591,26 @@ private slots:
     network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, QJsonValue())})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
     network.routes["GET files.wanikani.com/128.png"] = {{200, png}};
+    QTemporaryDir svgDir;
+    FakeNetwork svgNetwork;
+    for (const auto &route : {"/v2/assignments", "/v2/subjects", "/v2/study_materials"})
+      svgNetwork.routes["GET " + api + route] = network.routes["GET " + api + route];
+    // The SVG's CSS variable must not leave the stroke unpainted.
+    svgNetwork.routes["GET files.wanikani.com/a.svg"] = {
+        {200, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><style>.b{fill:none;stroke:var(--color-text, #000);stroke-width:4px}</style><path d=\"M0 5h10\" class=\"b\"/></svg>"}};
+    WaniKaniReviews fromSvg(svgDir.path(), nullptr, &svgNetwork);
+    fromSvg.refresh("test-token");
+    QTRY_VERIFY(fromSvg.next().has_value());
+    QImage drawn(fromSvg.next()->subject.picture);
+    QCOMPARE(drawn.size(), QSize(128, 128));
+    QVERIFY(qAlpha(drawn.pixel(64, 64)) > 128);
+    QStringList fileRequests;
+    for (const auto &s : svgNetwork.sent)
+      if (s.request.url().host() == "files.wanikani.com") {
+        fileRequests.append(s.path());
+        QVERIFY(s.request.rawHeader("Authorization").isEmpty());
+      }
+    QCOMPARE(fileRequests, QStringList{"/a.svg"});
     WaniKaniReviews reviews(dir.path(), nullptr, &network);
     QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
     reviews.refresh("test-token");
@@ -600,9 +620,14 @@ private slots:
     QVERIFY(c.subject.characters.isEmpty());
     QCOMPARE(c.subject.picture, dir.path() + "/wanikani_radicals/300.png");
     QVERIFY(QFileInfo::exists(c.subject.picture));
-    const auto &download = network.sent.last();
-    QCOMPARE(download.request.url().host(), QString("files.wanikani.com"));
-    QVERIFY(download.request.rawHeader("Authorization").isEmpty());
+    QStringList pngRequests;
+    for (const auto &s : network.sent)
+      if (s.request.url().host() == "files.wanikani.com") {
+        pngRequests.append(s.path());
+        QVERIFY(s.request.rawHeader("Authorization").isEmpty());
+      }
+    // An unusable SVG falls back to the PNG nearest 128 px.
+    QCOMPARE(pngRequests, (QStringList{"/a.svg", "/128.png"}));
   }
   void stageLabels() {
     QCOMPARE(reviewStageLabel(4), QString("Apprentice 4"));

@@ -58,6 +58,7 @@ public:
   std::optional<Challenge> next();
   void answer(const Challenge &challenge, bool correct);
   int waiting() const { return int(queue.size()); }
+  QString waitingText() const;
   bool refreshing() const { return loading; }
   QDateTime lastAttempt() const { return attemptedAt; }
 signals:
@@ -94,7 +95,7 @@ private:
   void reload();
   void build(const QJsonArray &assignments, const QJsonArray &subjects,
              const QJsonArray &materials);
-  void fetchPicture(int subjectId, const QUrl &url);
+  void fetchPicture(int subjectId, QList<QUrl> urls);
   void saveProgress();
   void keepProgress(const ReviewItem &item);
   void submitNext();
