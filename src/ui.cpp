@@ -547,7 +547,6 @@ void App::showCard() {
   recap.dismiss();
   previewCard.hide(); // The real card takes the sample's place.
   PerformanceSpan timing("select-and-present-card");
-  // WaniKani reviews always come before practice cards.
   const auto review = reviewModeOn() ? reviews.next() : std::nullopt;
   if (pool.isEmpty() && !review) {
     // Keep the interval running so reminders resume once words arrive.
