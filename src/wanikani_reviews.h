@@ -86,7 +86,7 @@ private:
   QRandomGenerator random{QRandomGenerator::global()->generate()};
   QDateTime attemptedAt;
   bool loading = false;
-  int epoch = 0, probeEpoch = 0, submitFailures = 0;
+  int epoch = 0, probeEpoch = 0, session = 0, submitFailures = 0;
   int submitRetryMs = 30000, getRetryMs = 3000;
   qint64 notBefore = 0;
   void send(const QUrl &url, std::optional<QByteArray> body, Handler done);

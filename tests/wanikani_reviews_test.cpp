@@ -619,6 +619,34 @@ private slots:
     QCOMPARE(reviews.waiting(), 0);
     QVERIFY(!reviews.next());
   }
+  void stopCancelsRateLimitedSubmission() {
+    QTemporaryDir dir;
+    FakeNetwork network;
+    network.routes["GET " + api + "/v2/assignments"] = {
+        page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)})};
+    network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
+    network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {
+        current(11, 300, "2026-10-19T09:00:00Z")};
+    network.routes["POST " + api + "/v2/reviews"] = {{201, "{}"}};
+    WaniKaniReviews reviews(dir.path(), nullptr, &network);
+    QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+    QSignalSpy checked(&reviews, &WaniKaniReviews::accessChecked);
+    reviews.refresh("test-token");
+    QTRY_COMPARE(refreshed.count(), 1);
+    reviews.notBefore = QDateTime::currentSecsSinceEpoch() + 1;
+    reviews.answer(*reviews.next(), true);
+    reviews.stop();
+    const auto before = network.sent.size();
+    QTest::qWait(1500);
+    QCOMPARE(network.sent.size(), before);
+    QCOMPARE(checked.count(), 0);
+    // Turned on again, the saved item goes out with the token.
+    reviews.refresh("test-token");
+    QTRY_COMPARE(network.posts().size(), 1);
+    QCOMPARE(network.posts()[0].request.rawHeader("Authorization"),
+             QByteArray("Bearer test-token"));
+  }
   void staleReviewIsNotSubmitted() {
     // WaniKani moved on (reviewed elsewhere, now due again, or not due yet):
     // the answers given here belong to a review that no longer exists.

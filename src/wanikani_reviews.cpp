@@ -244,8 +244,12 @@ void WaniKaniReviews::send(const QUrl &url, std::optional<QByteArray> body,
   }
   const qint64 wait =
       qMax(qint64(0), notBefore - QDateTime::currentSecsSinceEpoch()) * 1000;
+  // Nothing sent or answered before stop() acts after it.
+  const int live = session;
   QTimer::singleShot(int(qMin(wait, qint64(INT_MAX))), this,
-                     [this, url, body, done] {
+                     [this, url, body, done, live] {
+    if (live != session)
+      return;
     QNetworkRequest request(url);
     request.setRawHeader("Authorization", "Bearer " + token.toUtf8());
     request.setRawHeader("Wanikani-Revision", "20170710");
@@ -261,8 +265,10 @@ void WaniKaniReviews::send(const QUrl &url, std::optional<QByteArray> body,
       reply = transport->post(request, *body);
     } else
       reply = transport->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, done] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, done, live] {
       reply->deleteLater();
+      if (live != session)
+        return;
       Reply r;
       r.status =
           reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -699,6 +705,8 @@ void WaniKaniReviews::retryLater(const Reply &r) {
 }
 
 void WaniKaniReviews::stop() {
+  ++session;
+  submitting.clear();
   ++epoch;
   ++probeEpoch;
   loading = false;
