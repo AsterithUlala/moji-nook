@@ -451,13 +451,24 @@ private slots:
     network.routes["POST " + api + "/v2/reviews"] = {{422, R"({"error":"param is missing"})"}};
     reviews.checkAccess("test-token");
     QTRY_COMPARE(checked.count(), 1);
-    QVERIFY(checked.last()[0].toBool());
+    QCOMPARE(checked.last()[0].value<WaniKaniReviews::Access>(),
+             WaniKaniReviews::Access::Allowed);
     QCOMPARE(network.sent.last().body, QByteArray(R"({"review":{}})"));
     network.routes["POST " + api + "/v2/reviews"] = {{401, {}}};
     reviews.checkAccess("test-token");
     QTRY_COMPARE(checked.count(), 2);
-    QVERIFY(!checked.last()[0].toBool());
+    QCOMPARE(checked.last()[0].value<WaniKaniReviews::Access>(),
+             WaniKaniReviews::Access::Denied);
     QCOMPARE(checked.last()[1].toString(), reviewAccessDenied);
+    // Offline or a server error says nothing about the token.
+    for (const int status : {0, 503}) {
+      network.routes["POST " + api + "/v2/reviews"] = {{status, {}}};
+      const int before = checked.count();
+      reviews.checkAccess("test-token");
+      QTRY_COMPARE(checked.count(), before + 1);
+      QCOMPARE(checked.last()[0].value<WaniKaniReviews::Access>(),
+               WaniKaniReviews::Access::Unreachable);
+    }
   }
   void completedItemIsSubmittedOnce() {
     QTemporaryDir dir;

@@ -46,6 +46,7 @@ token page, create a new token, check `reviews:create`, then paste the token
 and choose **Save token and sync**. When you turn the mode on, Moji Nook checks
 the token by sending an empty review, which WaniKani rejects without recording
 anything. If the token can't submit reviews, the checkbox turns itself off.
+If WaniKani can't be reached when you save a new token, the mode stays on.
 
 Review mode follows WaniKani's rules:
 

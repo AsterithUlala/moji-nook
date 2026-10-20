@@ -289,7 +289,8 @@ void WaniKaniReviews::checkAccess(const QString &key) {
   const int probe = ++probeEpoch;
   token = key.trimmed();
   if (token.isEmpty()) {
-    emit accessChecked(false, "Paste your WaniKani token above first.");
+    emit accessChecked(Access::Denied,
+                       "Paste your WaniKani token above first.");
     return;
   }
   // An empty review is rejected as 422 only when the token may create reviews.
@@ -298,12 +299,13 @@ void WaniKaniReviews::checkAccess(const QString &key) {
          if (probe != probeEpoch)
            return;
          if (r.status == 422)
-           emit accessChecked(true, "Token can submit reviews");
+           emit accessChecked(Access::Allowed, "Token can submit reviews");
          else if (r.status == 401 || r.status == 403)
-           emit accessChecked(false, reviewAccessDenied);
+           emit accessChecked(Access::Denied, reviewAccessDenied);
          else
-           emit accessChecked(false, "Couldn't reach WaniKani to check the "
-                                     "token. Try again in a moment.");
+           emit accessChecked(Access::Unreachable,
+                              "Couldn't reach WaniKani to check the token. "
+                              "Try again in a moment.");
        });
 }
 
@@ -693,7 +695,7 @@ void WaniKaniReviews::post(const ReviewItem &item) {
 
 void WaniKaniReviews::retryLater(const Reply &r) {
   if (r.status == 401 || r.status == 403) {
-    emit accessChecked(false, reviewAccessDenied);
+    emit accessChecked(Access::Denied, reviewAccessDenied);
     return;
   }
   ++submitFailures;

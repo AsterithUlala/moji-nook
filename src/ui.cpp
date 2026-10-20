@@ -243,8 +243,16 @@ void App::connectReviews() {
     applyReviewMode();
   });
   connect(&reviews, &WaniKaniReviews::accessChecked, this,
-          [this](bool ok, const QString &message) {
-            if (!ok) {
+          [this](WaniKaniReviews::Access access, const QString &message) {
+            // Re-checking a newly saved token while offline keeps the mode;
+            // a rejected submission will still turn it off.
+            if (access == WaniKaniReviews::Access::Unreachable &&
+                reviewModeOn()) {
+              reviewStatus->setText(message);
+              reviews.refresh(readToken());
+              return;
+            }
+            if (access != WaniKaniReviews::Access::Allowed) {
               const QSignalBlocker block(reviewMode);
               reviewMode->setChecked(false);
               settings.setValue("wanikani/reviewMode", false);

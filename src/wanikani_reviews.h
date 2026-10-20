@@ -50,6 +50,9 @@ extern const QString reviewAccessDenied;
 class WaniKaniReviews : public QObject {
   Q_OBJECT
 public:
+  // Unreachable says nothing about the token; only Denied is definitive.
+  enum class Access { Allowed, Denied, Unreachable };
+  Q_ENUM(Access)
   explicit WaniKaniReviews(const QString &dataDir, QObject *parent = nullptr,
                            QNetworkAccessManager *transport = nullptr);
   void checkAccess(const QString &token);
@@ -62,7 +65,7 @@ public:
   bool refreshing() const { return loading; }
   QDateTime lastAttempt() const { return attemptedAt; }
 signals:
-  void accessChecked(bool canSubmit, QString message);
+  void accessChecked(WaniKaniReviews::Access access, QString message);
   void refreshed(bool ok, QString message);
   void submitted(QString message);
 

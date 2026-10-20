@@ -2275,6 +2275,39 @@ private slots:
     QVERIFY(note);
     QCOMPARE(note->text(), QString("Reviews mode on · finished items are sent to WaniKani."));
   }
+  void unreachableTokenCheckKeepsReviewMode() {
+    // A refused proxy stands in for being offline; nothing leaves the host.
+    QNetworkProxy::setApplicationProxy(
+        QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
+    const auto restore = qScopeGuard(
+        [] { QNetworkProxy::setApplicationProxy(QNetworkProxy::NoProxy); });
+    QTemporaryDir dir;
+    {
+      QSettings seeded(dir.path() + "/settings.ini", QSettings::IniFormat);
+      seeded.setValue("wanikani/reviewMode", true);
+    }
+    Store store(dir.path());
+    App app(store, dir.path());
+    QCheckBox *toggle = nullptr;
+    QPushButton *save = nullptr;
+    QLineEdit *token = nullptr;
+    for (auto *window : qApp->topLevelWidgets())
+      if (auto *candidate = window->findChild<QCheckBox *>("wanikaniReviewMode")) {
+        toggle = candidate;
+        save = window->findChild<QPushButton *>("saveToken");
+        token = window->findChild<QLineEdit *>("apiTokenInput");
+      }
+    QVERIFY(toggle && save && token);
+    QVERIFY(toggle->isChecked());
+    auto *status = toggle->parentWidget()->findChild<QLabel *>("wanikaniReviewStatus");
+    token->setText("replacement-token");
+    save->click();
+    QTRY_VERIFY_WITH_TIMEOUT(status->text().startsWith("Couldn't reach WaniKani"),
+                             10000);
+    QVERIFY(toggle->isChecked());
+    QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+    QVERIFY(saved.value("wanikani/reviewMode", false).toBool());
+  }
   void emptyTokenDoesNotClaimSaved() {
     QTemporaryDir dir;
     Store store(dir.path());
