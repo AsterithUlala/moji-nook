@@ -46,6 +46,7 @@ public:
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
   void setProgressTile(const std::optional<ProgressTile> &tile);
+  void showReviewNote(const QString &text);
   Challenge challenge;
 signals:
   void completed(Challenge challenge, int outcome, qint64 activeMs);
@@ -81,7 +82,7 @@ private:
   CardAccent *accent;
   bool reducedMotion = true;
   bool readingRetries = true;
-  QLabel *readingWarning;
+  QLabel *readingWarning, *reviewNote;
   AnkiDetails *ankiDetails;
   QPointer<JapaneseSpeech> speech;
   bool speechEnabled = false, speechAutoplay = true, preferRecording = false;

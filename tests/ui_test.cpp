@@ -2114,6 +2114,58 @@ private slots:
       for (int j = i + 1; j < bounds.size(); ++j)
         QVERIFY(!bounds[i].intersects(bounds[j]));
   }
+  void wanikaniReviewCardTypesMeaningAndReading() {
+    Card card;
+    card.setReadingRetries(false);
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "学校";
+    c.subject.meanings = {"School"};
+    c.subject.readings = {"がっこう"};
+    c.subject.contextJa = "学校に行く。";
+    c.mode = Mode::Typing;
+    c.wanikaniReview = true;
+    QSignalSpy graded(&card, &Card::graded);
+    card.present(c, 5);
+    auto *type = card.findChild<QLabel *>("challengeType");
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *kana = card.findChild<QLabel *>("kanaPreview");
+    auto *warning = card.findChild<QLabel *>("readingWarning");
+    auto *kind = card.findChild<QLabel *>("wordKind");
+    QCOMPARE(type->text(), QString("Meaning · Type"));
+    QCOMPARE(input->placeholderText(), QString("Type the meaning"));
+    QVERIFY(!card.findChild<QPushButton *>("revealAnswer")->isVisible());
+    input->setText("shool");
+    QVERIFY(!kana->isVisible());
+    input->setText("がっこう");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    QVERIFY(warning->isVisible());
+    QCOMPARE(warning->text(), QString("WaniKani wants the meaning, not the reading."));
+    input->setText("shool");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(graded.last().first().toBool());
+    // The reading half may still be asked, so the reveal must not show it.
+    for (auto *label : card.findChildren<QLabel *>())
+      if (label->isVisible())
+        QVERIFY2(!label->text().contains("がっこう"), qPrintable(label->objectName()));
+    c.reading = true;
+    card.present(c, 5);
+    QCOMPARE(type->text(), QString("Reading · Type"));
+    QCOMPARE(input->placeholderText(), QString("Romaji or kana"));
+    input->setText("gakkou");
+    QVERIFY(kana->isVisible());
+    QCOMPARE(kana->text(), QString("がっこう"));
+    c.reading = false;
+    c.subject.kind = "radical";
+    c.subject.characters = "一";
+    c.subject.readings = {};
+    card.present(c, 5);
+    QCOMPARE(kind->text(), QString("Radical"));
+    QVERIFY(kind->isVisible());
+  }
   void emptyTokenDoesNotClaimSaved() {
     QTemporaryDir dir;
     Store store(dir.path());

@@ -178,8 +178,10 @@ QString appStyle(int theme) {
     QLabel#wordKind[subjectKind="kanji"] { color:%1; }
     QLabel#wordKind[subjectKind="vocabulary"],
     QLabel#wordKind[subjectKind="kana_vocabulary"] { color:%2; }
+    QLabel#wordKind[subjectKind="radical"] { color:%3; }
   )").arg(wanikaniSubjectInk("kanji", theme).name(),
-          wanikaniSubjectInk("vocabulary", theme).name());
+          wanikaniSubjectInk("vocabulary", theme).name(),
+          wanikaniSubjectInk("radical", theme).name());
   css += QString(R"(
     QWidget#studioHeader { background:$rail; border:0; border-bottom:1px solid $border; }
     QWidget#studioHeader QLabel { background:transparent; color:$text; }

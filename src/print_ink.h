@@ -108,7 +108,7 @@ protected:
     const QString subjectKind = property("subjectKind").toString();
     const bool subjectTint = kind_ == Word &&
         (subjectKind == "kanji" || subjectKind == "vocabulary" ||
-         subjectKind == "kana_vocabulary");
+         subjectKind == "kana_vocabulary" || subjectKind == "radical");
     const auto sideGradient = [&](int alpha) {
       QColor tint = wanikaniSubjectHue(subjectKind, theme);
       tint.setAlpha(alpha);
