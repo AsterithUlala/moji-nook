@@ -1,5 +1,20 @@
 Moji Nook is an early alpha. Please [report problems](https://github.com/AsterithUlala/moji-nook/issues).
 
+## What's new
+
+- **WaniKani review mode (optional, off by default).** Turn on
+  **Settings → WaniKani → Do WaniKani reviews here** and your due WaniKani
+  reviews come first on the cards. You type every answer, Moji Nook grades it by
+  WaniKani's rules, and finished reviews are submitted to WaniKani. It needs a
+  token with `reviews:create` and never starts lessons. See
+  [review mode](https://github.com/AsterithUlala/moji-nook/blob/main/docs/USAGE.md#do-wanikani-reviews-in-moji-nook-optional).
+- Fixes for reminders that stopped, a double-click answering the next card,
+  snooze resets, speech that got stuck on "Preparing audio…", CSV export, and
+  several layout issues.
+- The Arch package now depends on `qt6-svg`.
+
+Full list: [CHANGELOG.md](https://github.com/AsterithUlala/moji-nook/blob/main/CHANGELOG.md).
+
 ## Downloads
 
 | File | For |
