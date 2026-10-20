@@ -2165,6 +2165,24 @@ private slots:
     card.present(c, 5);
     QCOMPARE(kind->text(), QString("Radical"));
     QVERIFY(kind->isVisible());
+    QTemporaryDir dir;
+    QImage glyph(32, 32, QImage::Format_ARGB32);
+    glyph.fill(Qt::transparent);
+    glyph.setPixel(16, 16, qRgba(0, 0, 0, 255));
+    QVERIFY(glyph.save(dir.path() + "/r.png"));
+    c.subject.characters.clear();
+    c.subject.picture = dir.path() + "/r.png";
+    card.present(c, 5);
+    auto *word = card.findChild<QLabel *>("word");
+    const QImage shown = word->pixmap().toImage();
+    QVERIFY(!shown.isNull());
+    // Black WaniKani ink is redrawn in the theme's text color.
+    bool inked = false;
+    for (int y = 0; y < shown.height(); ++y)
+      for (int x = 0; x < shown.width(); ++x)
+        inked |= qAlpha(shown.pixel(x, y)) > 0 &&
+                 QColor(shown.pixel(x, y)).lightness() > 128;
+    QVERIFY(inked);
   }
   void wanikaniReviewModeSetting() {
     QTemporaryDir dir;

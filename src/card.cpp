@@ -480,11 +480,10 @@ void Card::present(const Challenge &c, int minutes) {
   meta->setText(
       c.subject.source == "anki"
           ? QString("Anki · %1").arg(c.subject.deck.section("::", -1).left(22))
-          : QString("%1%2 · L%3")
-                .arg(c.wanikaniReview ? "WaniKani review · " : "")
-                .arg(c.wanikaniReview || c.subject.kind == "kanji"
-                         ? kindName
-                         : QString("Vocab"))
+          : QString("%1 · L%2")
+                .arg(c.wanikaniReview          ? QString("WaniKani review")
+                     : c.subject.kind == "kanji" ? QString("Kanji")
+                                                 : QString("Vocab"))
                 .arg(c.subject.level));
   meta->setToolTip(c.subject.source == "anki"
                        ? c.subject.deck
