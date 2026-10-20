@@ -153,9 +153,11 @@ namespace {
 const QSet<QString> apiPaths = {"/v2/assignments", "/v2/subjects",
                                 "/v2/study_materials", "/v2/reviews"};
 bool apiDestination(const QUrl &url) {
+  static const QRegularExpression oneAssignment("^/v2/assignments/\\d+$");
   return url.scheme() == "https" && url.host() == "api.wanikani.com" &&
          url.port(443) == 443 && url.userInfo().isEmpty() &&
-         apiPaths.contains(url.path());
+         (apiPaths.contains(url.path()) ||
+          oneAssignment.match(url.path()).hasMatch());
 }
 QJsonObject progressEntry(const ReviewItem &item) {
   return {{"assignment_id", item.assignmentId},
@@ -395,10 +397,10 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
     item.assignmentId = v.toObject()["id"].toInt();
     item.availableAt = d["available_at"].toString();
     const int subjectId = d["subject_id"].toInt();
-    if (progress.contains(item.key()) && !sent.contains(item.key()))
+    if (progress.contains(item.key()) && !settled.contains(item.key()))
       kept[item.key()] = progress[item.key()];
     if (item.assignmentId <= 0 || !subjectById.contains(subjectId) ||
-        sent.contains(item.key()))
+        settled.contains(item.key()))
       continue;
     const auto resource = subjectById[subjectId];
     item.subject = parseReviewSubject(resource, synonyms.value(subjectId));
@@ -552,6 +554,17 @@ void WaniKaniReviews::saveProgress() {
     f.commit();
 }
 
+void WaniKaniReviews::settle(const QString &key) {
+  settled.insert(key);
+  progress.remove(key);
+  saveProgress();
+  queue.erase(std::remove_if(queue.begin(), queue.end(),
+                             [&key](const ReviewItem &i) {
+                               return i.key() == key;
+                             }),
+              queue.end());
+}
+
 void WaniKaniReviews::submitNext() {
   if (!submitting.isEmpty() || token.isEmpty() || retryTimer.isActive())
     return;
@@ -564,6 +577,36 @@ void WaniKaniReviews::submitNext() {
     return;
   const ReviewItem item = *found;
   submitting = item.key();
+  // The answers belong to one review instance. If it was reviewed elsewhere,
+  // came due again, or isn't due, WaniKani's current review never got them.
+  send(QUrl(QString("https://api.wanikani.com/v2/assignments/%1")
+                .arg(item.assignmentId)),
+       std::nullopt, [this, item](const Reply &r) {
+         if (r.status == 200 || r.status == 404) {
+           const auto d =
+               QJsonDocument::fromJson(r.body).object()["data"].toObject();
+           const auto at = QDateTime::fromString(d["available_at"].toString(),
+                                                 Qt::ISODateWithMs);
+           if (r.status == 200 && d["available_at"] == item.availableAt &&
+               at.isValid() && at <= QDateTime::currentDateTimeUtc() &&
+               !d["hidden"].toBool()) {
+             post(item);
+             return;
+           }
+           submitting.clear();
+           settle(item.key());
+           if (queue.isEmpty())
+             reload();
+           else
+             submitNext();
+           return;
+         }
+         submitting.clear();
+         retryLater(r);
+       });
+}
+
+void WaniKaniReviews::post(const ReviewItem &item) {
   const QJsonObject body{
       {"review", QJsonObject{{"assignment_id", item.assignmentId},
                              {"incorrect_meaning_answers", item.meaningMisses},
@@ -576,14 +619,7 @@ void WaniKaniReviews::submitNext() {
          const auto key = item.key();
          if (r.status == 201 || r.status == 200) {
            submitFailures = 0;
-           sent.insert(key);
-           progress.remove(key);
-           saveProgress();
-           queue.erase(std::remove_if(queue.begin(), queue.end(),
-                                      [&key](const ReviewItem &i) {
-                                        return i.key() == key;
-                                      }),
-                       queue.end());
+           settle(key);
            const int stage = QJsonDocument::fromJson(r.body)
                                  .object()["resources_updated"]
                                  .toObject()["assignment"]
@@ -609,18 +645,21 @@ void WaniKaniReviews::submitNext() {
            reload();
            return;
          }
-         if (r.status == 401 || r.status == 403) {
-           emit accessChecked(false, reviewAccessDenied);
-           return;
-         }
-         ++submitFailures;
-         const auto now = QDateTime::currentSecsSinceEpoch();
-         const qint64 wait =
-             r.status == 429
-                 ? syncRetrySeconds(r.retryAfter, r.reset, now) * 1000
-                 : qint64(submitRetryMs) << qMin(submitFailures - 1, 4);
-         retryTimer.start(int(qMin(wait, qint64(600000))));
+         retryLater(r);
        });
+}
+
+void WaniKaniReviews::retryLater(const Reply &r) {
+  if (r.status == 401 || r.status == 403) {
+    emit accessChecked(false, reviewAccessDenied);
+    return;
+  }
+  ++submitFailures;
+  const auto now = QDateTime::currentSecsSinceEpoch();
+  const qint64 wait =
+      r.status == 429 ? syncRetrySeconds(r.retryAfter, r.reset, now) * 1000
+                      : qint64(submitRetryMs) << qMin(submitFailures - 1, 4);
+  retryTimer.start(int(qMin(wait, qint64(600000))));
 }
 
 void WaniKaniReviews::stop() {

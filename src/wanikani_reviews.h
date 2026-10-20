@@ -80,7 +80,9 @@ private:
   QVector<ReviewItem> queue;
   QJsonObject progress;
   // Held items got a 422 and wait for the next scheduled refresh.
-  QSet<QString> held, sent;
+  QSet<QString> held;
+  // Sent, or found stale before sending; never asked or sent again.
+  QSet<QString> settled;
   QString submitting;
   QTimer retryTimer;
   QRandomGenerator random{QRandomGenerator::global()->generate()};
@@ -99,5 +101,8 @@ private:
   void saveProgress();
   void keepProgress(const ReviewItem &item);
   void submitNext();
+  void post(const ReviewItem &item);
+  void retryLater(const Reply &r);
+  void settle(const QString &key);
   void failRefresh(const QString &message);
 };

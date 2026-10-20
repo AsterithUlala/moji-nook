@@ -120,6 +120,14 @@ QJsonObject assignment(int id, int subject, const QString &at, int stage = 4,
                                {"srs_stage", stage},
                                {"hidden", hidden}}}};
 }
+// GET /v2/assignments/{id}, which every submission checks first.
+Response current(int id, int subject, const QString &at, bool hidden = false) {
+  return {200, json({{"id", id},
+                     {"object", "assignment"},
+                     {"data", QJsonObject{{"subject_id", subject},
+                                          {"available_at", at.isEmpty() ? QJsonValue() : QJsonValue(at)},
+                                          {"hidden", hidden}}}})};
+}
 QJsonObject meaningEntry(const QString &m, bool primary = true) {
   return {{"meaning", m}, {"primary", primary}, {"accepted_answer", true}};
 }
@@ -416,6 +424,7 @@ private slots:
         page({assignment(11, 100, "2026-10-19T09:00:00.000000Z")}), page({})};
     network.routes["GET " + api + "/v2/subjects"] = {page({kanjiHouse()})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {current(11, 100, "2026-10-19T09:00:00.000000Z")};
     network.routes["POST " + api + "/v2/reviews"] = {
         {201, json({{"resources_updated",
                      QJsonObject{{"assignment",
@@ -448,6 +457,11 @@ private slots:
              QByteArray(R"({"review":{"assignment_id":11,"incorrect_meaning_answers":1,"incorrect_reading_answers":2}})"));
     QCOMPARE(network.posts()[0].request.rawHeader("Authorization"),
              QByteArray("Bearer test-token"));
+    // Sent only right after WaniKani confirmed this review is still current.
+    int post = 0;
+    while (network.sent[post].operation != QNetworkAccessManager::PostOperation)
+      ++post;
+    QCOMPARE(network.sent[post - 1].path(), QString("/v2/assignments/11"));
     QCOMPARE(reviews.waiting(), 0);
     // An emptied queue refreshes to pick up newly unlocked reviews.
     QTRY_COMPARE(refreshed.count(), 2);
@@ -466,9 +480,10 @@ private slots:
         page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)})};
     network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {current(11, 300, "2026-10-19T09:00:00Z")};
     network.routes["POST " + api + "/v2/reviews"] = {{503, {}}, {0, {}}, {201, "{}"}};
     WaniKaniReviews reviews(dir.path(), nullptr, &network);
-    reviews.submitRetryMs = 20;
+    reviews.submitRetryMs = 200;
     QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
     QSignalSpy submitted(&reviews, &WaniKaniReviews::submitted);
     reviews.refresh("test-token");
@@ -501,6 +516,7 @@ private slots:
         page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)})};
     network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {current(11, 300, "2026-10-19T09:00:00Z")};
     network.routes["POST " + api + "/v2/reviews"] = {{201, "{}", 300}};
     WaniKaniReviews reviews(dir.path(), nullptr, &network);
     QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
@@ -522,6 +538,7 @@ private slots:
         page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)}), page({})};
     network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {current(11, 300, "2026-10-19T09:00:00Z")};
     network.routes["POST " + api + "/v2/reviews"] = {{422, "{}"}};
     WaniKaniReviews reviews(dir.path(), nullptr, &network);
     QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
@@ -535,6 +552,42 @@ private slots:
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QVERIFY(!saved.readAll().contains("11@"));
   }
+  void staleReviewIsNotSubmitted() {
+    // WaniKani moved on (reviewed elsewhere, now due again, or not due yet):
+    // the answers given here belong to a review that no longer exists.
+    struct Case {
+      QString listed, current;
+      bool hidden;
+    };
+    const QList<Case> cases = {
+        {"2026-10-19T09:00:00.000000Z", "2026-10-19T21:00:00.000000Z", false},
+        {"2026-10-19T09:00:00.000000Z", "", false},
+        {"2026-10-19T09:00:00.000000Z", "2026-10-19T09:00:00.000000Z", true},
+        {"2099-01-01T00:00:00.000000Z", "2099-01-01T00:00:00.000000Z", false}};
+    for (const auto &c : cases) {
+      QTemporaryDir dir;
+      FakeNetwork network;
+      network.routes["GET " + api + "/v2/assignments"] = {
+          page({assignment(11, 300, c.listed, 1)}), page({})};
+      network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
+      network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+      network.routes["GET " + api + "/v2/assignments/11"] = {
+          current(11, 300, c.current, c.hidden)};
+      network.routes["POST " + api + "/v2/reviews"] = {{201, "{}"}};
+      WaniKaniReviews reviews(dir.path(), nullptr, &network);
+      QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+      reviews.refresh("test-token");
+      QTRY_COMPARE(refreshed.count(), 1);
+      reviews.answer(*reviews.next(), false);
+      reviews.answer(*reviews.next(), true);
+      QTRY_COMPARE(reviews.waiting(), 0);
+      QTest::qWait(20);
+      QVERIFY2(network.posts().isEmpty(), qPrintable(c.current));
+      QFile saved(dir.path() + "/wanikani_review_progress.json");
+      QVERIFY(saved.open(QIODevice::ReadOnly));
+      QVERIFY(!saved.readAll().contains("11@"));
+    }
+  }
   void progressSurvivesRestart() {
     QTemporaryDir dir;
     FakeNetwork network;
@@ -542,6 +595,7 @@ private slots:
         page({assignment(11, 100, "2026-10-19T09:00:00Z")})};
     network.routes["GET " + api + "/v2/subjects"] = {page({kanjiHouse()})};
     network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {current(11, 100, "2026-10-19T09:00:00Z")};
     network.routes["POST " + api + "/v2/reviews"] = {{201, "{}"}};
     {
       WaniKaniReviews first(dir.path(), nullptr, &network);

@@ -58,6 +58,9 @@ Review mode follows WaniKani's rules:
 - A wrong answer counts as a miss, and that half of the item comes back later.
 - When both halves are answered correctly, Moji Nook sends the review to
   WaniKani with its miss counts and shows the new SRS stage.
+- Just before sending, Moji Nook asks WaniKani whether that review is still
+  due. If you did it elsewhere in the meantime, nothing is sent and its saved
+  misses are dropped.
 - Dismissing a card sends nothing.
 
 Progress on each item, including misses, is saved in
