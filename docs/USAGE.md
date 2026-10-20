@@ -19,7 +19,8 @@ deduplicate vocabulary across them.
 
 1. Open **Settings → WaniKani → Open WaniKani token settings**, or visit
    [WaniKani's personal access token page](https://www.wanikani.com/settings/personal_access_tokens).
-2. Create a personal API token. Moji Nook only reads data; it needs no write permissions.
+2. Create a personal API token. Practice only reads data and needs no write
+   permissions. The optional review mode below needs `reviews:create`.
 3. Paste the token into **WaniKani API token** and choose **Save token and sync**.
 4. Wait for sync to finish, then choose **Practice now**.
 
@@ -30,7 +31,48 @@ The first sync downloads a baseline; later syncs reuse the cache and request cha
 Eligible items are started, nonhidden kanji, vocabulary, and kana vocabulary
 within the account's cached access level. Unstarted lessons and radicals are
 excluded. An account with no eligible learned items cannot supply practice yet.
-Moji Nook does not submit lessons or reviews and never advances your WaniKani SRS stage.
+Practice cards never submit anything to WaniKani. Only the optional review mode
+below submits reviews and moves SRS stages. Moji Nook never starts lessons.
+
+### Do WaniKani reviews in Moji Nook (optional)
+
+Turn on **Settings → WaniKani → Do WaniKani reviews here** to clear your WaniKani
+review queue from Moji Nook's cards. While WaniKani has reviews waiting, each
+card asks one of those reviews instead of a practice card. When none are
+waiting, practice cards resume.
+
+The mode needs a token with the **reviews:create** permission. On WaniKani's
+token page, create a new token, check `reviews:create`, then paste the token
+and choose **Save token and sync**. When you turn the mode on, Moji Nook checks
+the token by sending an empty review, which WaniKani rejects without recording
+anything. If the token can't submit reviews, the checkbox turns itself off.
+If WaniKani can't be reached when you save a new token, the mode stays on.
+
+Review mode follows WaniKani's rules:
+
+- You type every answer. Radicals and kana-only vocabulary ask only the
+  meaning. Kanji and vocabulary ask both the meaning and the reading.
+- Small meaning typos are accepted, as on WaniKani. Answers in WaniKani's
+  blocked-meaning list are wrong.
+- A reading typed as a meaning (in kana or romaji), a verb meaning typed
+  without "to", anything but kana in a reading (spaces, punctuation, digits,
+  leftover Latin letters), or a kanji reading of the wrong type (on'yomi or
+  kun'yomi) asks again without a miss. A leading "the" or "a" is graded as
+  typed, unlike practice cards.
+- A wrong answer counts as a miss, and that half of the item comes back later.
+- When both halves are answered correctly, Moji Nook sends the review to
+  WaniKani with its miss counts and shows the new SRS stage.
+- Just before sending, Moji Nook asks WaniKani whether that review is still
+  due. If you did it elsewhere in the meantime, nothing is sent and its saved
+  misses are dropped.
+- Dismissing a card sends nothing.
+
+Progress on each item, including misses, is saved in
+`wanikani_review_progress.json` in the data directory as soon as each answer
+is checked. Quitting before an item is finished keeps its misses. If WaniKani can't be reached, finished items wait
+and are sent later. Moji Nook checks for new reviews about every five minutes
+and at the start of each hour. Radical answers are not counted in Moji Nook's
+local practice stats.
 
 Automatic refresh is due 24 hours after the last successful sync, checked at
 startup and each minute while running. Temporary failures retain the previous
@@ -240,8 +282,11 @@ test build at your real data.
 Do not share a live SQLite database between running instances.
 
 Moji Nook has no cloud progress account or telemetry service. Source refreshes
-contact WaniKani over HTTPS or local AnkiConnect over HTTP. WaniKani requests
-are GET-only; AnkiConnect uses POST as the transport for read-only RPC actions.
+contact WaniKani over HTTPS or local AnkiConnect over HTTP. WaniKani sync
+requests are GET-only. Review mode, when on, also posts finished reviews and its
+token check to WaniKani's `/v2/reviews` and downloads radical images from
+`files.wanikani.com`. AnkiConnect uses POST as the transport for read-only RPC
+actions.
 Build-time speech downloads are separate from runtime source connections.
 Never attach tokens, private caches, decks, recordings, or your practice database
 to a public bug report. Screenshots can expose personal study content too.

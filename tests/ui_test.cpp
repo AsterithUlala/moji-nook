@@ -2114,6 +2114,200 @@ private slots:
       for (int j = i + 1; j < bounds.size(); ++j)
         QVERIFY(!bounds[i].intersects(bounds[j]));
   }
+  void wanikaniReviewCardTypesMeaningAndReading() {
+    Card card;
+    card.setReadingRetries(false);
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "学校";
+    c.subject.meanings = {"School"};
+    c.subject.readings = {"がっこう"};
+    c.subject.contextJa = "学校に行く。";
+    c.mode = Mode::Typing;
+    c.wanikaniReview = true;
+    QSignalSpy graded(&card, &Card::graded);
+    card.present(c, 5);
+    auto *type = card.findChild<QLabel *>("challengeType");
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *kana = card.findChild<QLabel *>("kanaPreview");
+    auto *warning = card.findChild<QLabel *>("readingWarning");
+    auto *kind = card.findChild<QLabel *>("wordKind");
+    QCOMPARE(type->text(), QString("Meaning · Type"));
+    QCOMPARE(input->placeholderText(), QString("Type the meaning"));
+    QVERIFY(!card.findChild<QPushButton *>("revealAnswer")->isVisible());
+    input->setText("shool");
+    QVERIFY(!kana->isVisible());
+    input->setText("がっこう");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    QVERIFY(warning->isVisible());
+    QCOMPARE(warning->text(), QString("WaniKani wants the meaning, not the reading."));
+    input->setText("shool");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(graded.last().first().toBool());
+    // The reading half may still be asked, so the reveal must not show it.
+    for (auto *label : card.findChildren<QLabel *>())
+      if (label->isVisible())
+        QVERIFY2(!label->text().contains("がっこう"), qPrintable(label->objectName()));
+    c.reading = true;
+    card.present(c, 5);
+    QCOMPARE(type->text(), QString("Reading · Type"));
+    QCOMPARE(input->placeholderText(), QString("Romaji or kana"));
+    input->setText("gakkou");
+    QVERIFY(kana->isVisible());
+    QCOMPARE(kana->text(), QString("がっこう"));
+    c.reading = false;
+    c.subject.kind = "radical";
+    c.subject.characters = "一";
+    c.subject.readings = {};
+    card.present(c, 5);
+    QCOMPARE(kind->text(), QString("Radical"));
+    QVERIFY(kind->isVisible());
+    QTemporaryDir dir;
+    QImage glyph(32, 32, QImage::Format_ARGB32);
+    glyph.fill(Qt::transparent);
+    glyph.setPixel(16, 16, qRgba(0, 0, 0, 255));
+    QVERIFY(glyph.save(dir.path() + "/r.png"));
+    c.subject.characters.clear();
+    c.subject.picture = dir.path() + "/r.png";
+    card.present(c, 5);
+    auto *word = card.findChild<QLabel *>("word");
+    const QImage shown = word->pixmap().toImage();
+    QVERIFY(!shown.isNull());
+    // Black WaniKani ink is redrawn in the theme's text color.
+    bool inked = false;
+    for (int y = 0; y < shown.height(); ++y)
+      for (int x = 0; x < shown.width(); ++x)
+        inked |= qAlpha(shown.pixel(x, y)) > 0 &&
+                 QColor(shown.pixel(x, y)).lightness() > 128;
+    QVERIFY(inked);
+    // The image's name must not give away the meaning being asked.
+    QCOMPARE(word->accessibleName(), QString("Radical image"));
+    c.subject.characters = "一";
+    card.present(c, 5);
+    QVERIFY(word->accessibleName().isEmpty());
+  }
+  void wanikaniReviewAnswerIsSavedWhenGraded() {
+    QTemporaryDir dir;
+    Store store(dir.path());
+    App app(store, dir.path());
+    // The practice and settings-preview cards look alike here; grade the
+    // review on both and expect exactly one recorded miss.
+    QList<Card *> cards;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *candidate = qobject_cast<Card *>(window))
+        cards.append(candidate);
+    QCOMPARE(cards.size(), 2);
+    Challenge c;
+    c.subject.source = "wanikani";
+    c.subject.kind = "kanji";
+    c.subject.characters = "家";
+    c.subject.meanings = {"House"};
+    c.subject.readings = {"か"};
+    c.mode = Mode::Typing;
+    c.wanikaniReview = true;
+    c.event["wanikani_review"] = true;
+    c.event["assignment_id"] = 11;
+    c.event["available_at"] = "2026-10-19T09:00:00.000000Z";
+    c.event["subject_kind"] = "kanji";
+    const auto saved = [&] {
+      QFile f(dir.path() + "/wanikani_review_progress.json");
+      if (!f.open(QIODevice::ReadOnly))
+        return QJsonObject();
+      return QJsonDocument::fromJson(f.readAll())
+          .object()["items"]
+          .toObject()["11@2026-10-19T09:00:00.000000Z"]
+          .toObject();
+    };
+    const auto type = [](Card *card, const QString &text) {
+      card->findChild<QLineEdit *>("readingInput")->setText(text);
+      card->findChild<QPushButton *>("checkReading")->click();
+    };
+    for (auto *card : cards) {
+      card->present(c, 5);
+      type(card, "いえ");
+    }
+    QVERIFY2(saved().isEmpty(), "a retry shake is not a miss");
+    for (auto *card : cards)
+      type(card, "dog");
+    // Saved at grading, so quitting or crashing with the card open keeps it.
+    QCOMPARE(saved()["meaning_misses"].toInt(), 1);
+    QVERIFY(!saved()["meaning_done"].toBool());
+    for (auto *card : cards)
+      card->findChild<QPushButton *>("finishCard")->click();
+    QCOMPARE(saved()["meaning_misses"].toInt(), 1);
+  }
+  void wanikaniReviewModeSetting() {
+    QTemporaryDir dir;
+    Store store(dir.path());
+    {
+      App app(store, dir.path());
+      QCheckBox *toggle = nullptr;
+      for (auto *window : qApp->topLevelWidgets())
+        if (auto *candidate = window->findChild<QCheckBox *>("wanikaniReviewMode"))
+          toggle = candidate;
+      QVERIFY(toggle);
+      QCOMPARE(toggle->text(), QString("Do WaniKani reviews here"));
+      QVERIFY(!toggle->isChecked());
+      QVERIFY(toggle->toolTip().startsWith("When WaniKani has reviews waiting"));
+      QVERIFY(toggle->toolTip().endsWith("Needs a token with the reviews:create permission."));
+      auto *status = toggle->parentWidget()->findChild<QLabel *>("wanikaniReviewStatus");
+      QVERIFY(status);
+      // Without a token the probe fails, so the mode never turns on.
+      toggle->click();
+      QVERIFY(!toggle->isChecked());
+      QVERIFY(status->text().contains("token"));
+      QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+      QVERIFY(!saved.value("wanikani/reviewMode", false).toBool());
+    }
+    QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+    saved.setValue("wanikani/reviewMode", true);
+    saved.sync();
+    App app(store, dir.path());
+    app.start(false, true);
+    QLabel *note = nullptr;
+    for (auto *window : qApp->topLevelWidgets())
+      for (auto *label : window->findChildren<QLabel *>())
+        if (label->text().startsWith("Reviews mode on"))
+          note = label;
+    QVERIFY(note);
+    QCOMPARE(note->text(), QString("Reviews mode on · finished items are sent to WaniKani."));
+  }
+  void unreachableTokenCheckKeepsReviewMode() {
+    // A refused proxy stands in for being offline; nothing leaves the host.
+    QNetworkProxy::setApplicationProxy(
+        QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
+    const auto restore = qScopeGuard(
+        [] { QNetworkProxy::setApplicationProxy(QNetworkProxy::NoProxy); });
+    QTemporaryDir dir;
+    {
+      QSettings seeded(dir.path() + "/settings.ini", QSettings::IniFormat);
+      seeded.setValue("wanikani/reviewMode", true);
+    }
+    Store store(dir.path());
+    App app(store, dir.path());
+    QCheckBox *toggle = nullptr;
+    QPushButton *save = nullptr;
+    QLineEdit *token = nullptr;
+    for (auto *window : qApp->topLevelWidgets())
+      if (auto *candidate = window->findChild<QCheckBox *>("wanikaniReviewMode")) {
+        toggle = candidate;
+        save = window->findChild<QPushButton *>("saveToken");
+        token = window->findChild<QLineEdit *>("apiTokenInput");
+      }
+    QVERIFY(toggle && save && token);
+    QVERIFY(toggle->isChecked());
+    auto *status = toggle->parentWidget()->findChild<QLabel *>("wanikaniReviewStatus");
+    token->setText("replacement-token");
+    save->click();
+    QTRY_VERIFY_WITH_TIMEOUT(status->text().startsWith("Couldn't reach WaniKani"),
+                             10000);
+    QVERIFY(toggle->isChecked());
+    QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+    QVERIFY(saved.value("wanikani/reviewMode", false).toBool());
+  }
   void emptyTokenDoesNotClaimSaved() {
     QTemporaryDir dir;
     Store store(dir.path());

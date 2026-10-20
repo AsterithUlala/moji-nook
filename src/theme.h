@@ -36,8 +36,9 @@ inline int pairedTheme(int index, bool night) {
 
 // WaniKani subject hues are accents, mixed into the current theme's ink.
 inline QColor wanikaniSubjectHue(const QString &kind, int theme) {
-  return kind == "kanji" ? QColor(theme % 2 ? "#f26da0" : "#cd397a")
-                         : QColor(theme % 2 ? "#9367f3" : "#6838c7");
+  return kind == "kanji"     ? QColor(theme % 2 ? "#f26da0" : "#cd397a")
+         : kind == "radical" ? QColor(theme % 2 ? "#5cb8f2" : "#1b74b8")
+                             : QColor(theme % 2 ? "#9367f3" : "#6838c7");
 }
 inline QColor wanikaniSubjectInk(const QString &kind, int theme) {
   const QColor ink(colors(theme).text), hue = wanikaniSubjectHue(kind, theme);

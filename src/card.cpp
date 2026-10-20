@@ -111,6 +111,11 @@ Card::Card(QWidget *parent)
   kana->setObjectName("kanaPreview");
   kana->setAlignment(Qt::AlignCenter);
   layout->addWidget(kana);
+  reviewNote = label({}, "muted");
+  reviewNote->setObjectName("wanikaniReviewNote");
+  reviewNote->setAlignment(Qt::AlignCenter);
+  reviewNote->hide();
+  layout->addWidget(reviewNote);
   readingWarning = label({});
   readingWarning->setObjectName("readingWarning");
   readingWarning->setAlignment(Qt::AlignCenter);
@@ -252,7 +257,8 @@ Card::Card(QWidget *parent)
   connect(input, &QLineEdit::returnPressed, this, submit);
   connect(input, &QLineEdit::textChanged, this, [this](const QString &text) {
     kana->setText(toKana(text));
-    kana->setVisible(input->isVisible() && !text.trimmed().isEmpty());
+    kana->setVisible(input->isVisible() && !text.trimmed().isEmpty() &&
+                     (challenge.reading || !challenge.wanikaniReview));
     check->setEnabled(!text.trimmed().isEmpty());
   });
   for (auto *child : findChildren<QWidget *>())
@@ -428,9 +434,14 @@ void Card::present(const Challenge &c, int minutes) {
   challenge = c;
   const QString kind = c.subject.source == "wanikani" ? c.subject.kind : QString();
   const bool hasWordKind = kind == "kanji" || kind == "vocabulary" ||
-                           kind == "kana_vocabulary";
-  wordKind->setText(kind == "kanji" ? "Kanji" : "Vocab");
-  wordKind->setAccessibleName(kind == "kanji" ? "WaniKani kanji" : "WaniKani vocabulary");
+                           kind == "kana_vocabulary" || kind == "radical";
+  const QString kindName = kind == "kanji"     ? "Kanji"
+                           : kind == "radical" ? "Radical"
+                                               : "Vocab";
+  wordKind->setText(kindName);
+  wordKind->setAccessibleName(kind == "kanji"     ? "WaniKani kanji"
+                              : kind == "radical" ? "WaniKani radical"
+                                                  : "WaniKani vocabulary");
   wordKind->setVisible(hasWordKind);
   wordKind->setProperty("subjectKind", hasWordKind ? kind : QString());
   wordKind->style()->unpolish(wordKind);
@@ -444,6 +455,8 @@ void Card::present(const Challenge &c, int minutes) {
   challenge.event["reading_retry_enabled"] = readingRetries;
   readingWarning->clear();
   readingWarning->hide();
+  reviewNote->clear();
+  reviewNote->hide();
   challenge.event["presented_at"] =
       QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
   result = -1;
@@ -468,16 +481,32 @@ void Card::present(const Challenge &c, int minutes) {
       c.subject.source == "anki"
           ? QString("Anki · %1").arg(c.subject.deck.section("::", -1).left(22))
           : QString("%1 · L%2")
-                .arg(c.subject.kind == "kanji" ? "Kanji" : "Vocab")
+                .arg(c.wanikaniReview          ? QString("WaniKani review")
+                     : c.subject.kind == "kanji" ? QString("Kanji")
+                                                 : QString("Vocab"))
                 .arg(c.subject.level));
   meta->setToolTip(c.subject.source == "anki"
                        ? c.subject.deck
                        : "WaniKani · " + stageName(c.subject.stage));
-  challengeType->setText(c.mode == Mode::Typing ? QString("Reading (Romaji/Kana)") : QString("%1 · %2").arg(
+  challengeType->setText(c.mode == Mode::Typing && !c.wanikaniReview ? QString("Reading (Romaji/Kana)") : QString("%1 · %2").arg(
       c.reading ? "Reading" : "Meaning", c.mode == Mode::Typing   ? "Type"
                                          : c.mode == Mode::Choice ? "Choose"
                                                                   : "Recall"));
   characters->setText(c.subject.characters);
+  characters->setAccessibleName({});
+  if (c.subject.characters.isEmpty() && !c.subject.picture.isEmpty()) {
+    // WaniKani draws image-only radicals in black; ink them in the theme's
+    // text color.
+    QPixmap glyph = QPixmap(c.subject.picture)
+                        .scaled(64, 64, Qt::KeepAspectRatio,
+                                Qt::SmoothTransformation);
+    QPainter painter(&glyph);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(glyph.rect(), QColor(colors(themeIndex).text));
+    painter.end();
+    characters->setPixmap(glyph);
+    characters->setAccessibleName("Radical image");
+  }
   // Keep longer vocabulary within the compact card.
   characters->setStyleSheet(QString("font-size:%1px")
                                 .arg(c.subject.characters.size() > 6   ? 34
@@ -496,8 +525,21 @@ void Card::present(const Challenge &c, int minutes) {
                                      ? "kun’yomi"
                                      : c.subject.readingKind)
           : "";
+  // WaniKani doesn't say which kanji reading it wants until you answer.
+  if (c.wanikaniReview)
+    readingType.clear();
   prompt->setText(readingType.trimmed());
   prompt->setVisible(!readingType.isEmpty());
+  const bool typedMeaning = c.wanikaniReview && !c.reading;
+  input->setPlaceholderText(typedMeaning ? "Type the meaning" : "Romaji or kana");
+  input->setAccessibleName(typedMeaning ? "English meaning" : "Japanese reading");
+  input->setAccessibleDescription(
+      typedMeaning ? "Enter the meaning in English. Enter checks the answer."
+                   : "Enter romaji or kana. Enter checks the answer.");
+  input->setStyleSheet(typedMeaning
+                           ? "font-size:20px;"
+                           : "font-family:'Noto Sans CJK JP'; font-size:23px;");
+  check->setText(typedMeaning ? "Check meaning" : "Check reading");
   input->setVisible(c.mode == Mode::Typing);
   kana->hide();
   check->setVisible(c.mode == Mode::Typing);
@@ -698,6 +740,9 @@ void Card::showAnswer() {
   QString example = challenge.subject.contextJa;
   if (!challenge.subject.contextEn.isEmpty())
     example += "\n" + challenge.subject.contextEn;
+  // The item's other half may still be asked; keep its answer hidden.
+  if (challenge.wanikaniReview)
+    supplementary = example = QString();
   supplement->setText(supplementary);
   supplement->setVisible(!supplementary.isEmpty());
   context->setText(example);
@@ -716,9 +761,10 @@ void Card::showAnswer() {
   }
   const bool recorded = preferRecording && challenge.subject.source == "anki" &&
       !challenge.subject.wordAudio.isEmpty() && QFileInfo::exists(challenge.subject.wordAudio);
-  listen->setVisible(speechEnabled && !recorded &&
-                    !challenge.subject.reading().isEmpty());
-  if (firstReveal && speechEnabled && speechAutoplay && !recorded)
+  const bool speakable = !challenge.subject.reading().isEmpty() &&
+                         (challenge.reading || !challenge.wanikaniReview);
+  listen->setVisible(speechEnabled && !recorded && speakable);
+  if (firstReveal && speechEnabled && speechAutoplay && !recorded && speakable)
     speakAnswer();
   fitCard();
 }
@@ -726,7 +772,9 @@ void Card::grade(bool correct, const QString &response) {
   if (resolved)
     return;
   const auto retryHint =
-      readingRetries ? challenge.readingRetryHint(response) : QString();
+      readingRetries || challenge.wanikaniReview
+          ? challenge.readingRetryHint(response)
+          : QString();
   if (!correct && !retryHint.isEmpty()) {
     auto retries = challenge.event["reading_retries"].toArray();
     retries.append(QJsonObject{
@@ -775,6 +823,13 @@ void Card::grade(bool correct, const QString &response) {
     accent->pulse(
         correct ? colors(themeIndex).accent : colors(themeIndex).negative, 320);
   emit graded(correct);
+}
+void Card::showReviewNote(const QString &text) {
+  if (!isVisible())
+    return;
+  reviewNote->setText(text);
+  reviewNote->show();
+  fitCard();
 }
 void Card::setReducedMotion(bool reduced) {
   reducedMotion = reduced;

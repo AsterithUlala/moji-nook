@@ -1,4 +1,5 @@
 #include "core.h"
+#include "wanikani_reviews.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -225,6 +226,9 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
 }
 
 bool Challenge::accepts(const QString &text) const {
+  if (wanikaniReview)
+    return checkReviewAnswer(subject, reading, text).verdict ==
+           ReviewVerdict::Correct;
   if (text.trimmed().isEmpty())
     return false;
   for (const auto &a : reading ? subject.readings : subject.meanings)
@@ -235,6 +239,10 @@ bool Challenge::accepts(const QString &text) const {
 }
 
 QString Challenge::readingRetryHint(const QString &text) const {
+  if (wanikaniReview) {
+    const auto check = checkReviewAnswer(subject, reading, text);
+    return check.verdict == ReviewVerdict::Retry ? check.hint : QString();
+  }
   if (!reading || mode != Mode::Typing || accepts(text) ||
       (subject.kind != "kanji" && subject.kind != "vocabulary"))
     return {};
