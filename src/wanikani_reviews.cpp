@@ -303,7 +303,6 @@ void WaniKaniReviews::checkAccess(const QString &key) {
 
 void WaniKaniReviews::refresh(const QString &key) {
   token = key.trimmed();
-  held.clear();
   reload();
 }
 
@@ -605,16 +604,18 @@ void WaniKaniReviews::settle(const QString &key) {
                                return i.key() == key;
                              }),
               queue.end());
+  if (queue.isEmpty())
+    reload();
+  else
+    submitNext();
 }
 
 void WaniKaniReviews::submitNext() {
   if (!submitting.isEmpty() || token.isEmpty() || retryTimer.isActive())
     return;
-  const auto found = std::find_if(queue.cbegin(), queue.cend(),
-                                  [this](const ReviewItem &item) {
-                                    return item.complete() &&
-                                           !held.contains(item.key());
-                                  });
+  const auto found =
+      std::find_if(queue.cbegin(), queue.cend(),
+                   [](const ReviewItem &item) { return item.complete(); });
   if (found == queue.cend())
     return;
   const ReviewItem item = *found;
@@ -637,10 +638,6 @@ void WaniKaniReviews::submitNext() {
            }
            submitting.clear();
            settle(item.key());
-           if (queue.isEmpty())
-             reload();
-           else
-             submitNext();
            return;
          }
          submitting.clear();
@@ -676,15 +673,12 @@ void WaniKaniReviews::post(const ReviewItem &item) {
                          : QString("%1 · %2 → %3")
                                .arg(name, reviewStageLabel(item.subject.stage),
                                     reviewStageLabel(stage)));
-           if (queue.isEmpty())
-             reload();
-           else
-             submitNext();
            return;
          }
+         // WaniKani confirmed the review was current, so a rejection won't
+         // change on retry.
          if (r.status == 422) {
-           held.insert(key);
-           reload();
+           settle(key);
            return;
          }
          retryLater(r);
@@ -710,6 +704,5 @@ void WaniKaniReviews::stop() {
   loading = false;
   token.clear();
   queue.clear();
-  held.clear();
   retryTimer.stop();
 }

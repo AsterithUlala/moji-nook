@@ -79,9 +79,7 @@ private:
   QNetworkAccessManager *transport;
   QVector<ReviewItem> queue;
   QJsonObject progress;
-  // Held items got a 422 and wait for the next scheduled refresh.
-  QSet<QString> held;
-  // Sent, or found stale before sending; never asked or sent again.
+  // Sent, rejected, or found stale before sending; never asked or sent again.
   QSet<QString> settled;
   QString submitting;
   QTimer retryTimer;

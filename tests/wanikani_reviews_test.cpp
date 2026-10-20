@@ -594,6 +594,31 @@ private slots:
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QVERIFY(!saved.readAll().contains("11@"));
   }
+  void rejectedSubmissionIsNotRetriedOnRefresh() {
+    QTemporaryDir dir;
+    FakeNetwork network;
+    network.routes["GET " + api + "/v2/assignments"] = {
+        page({assignment(11, 300, "2026-10-19T09:00:00Z", 1)})};
+    network.routes["GET " + api + "/v2/subjects"] = {page({radical(300, "一")})};
+    network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    network.routes["GET " + api + "/v2/assignments/11"] = {
+        current(11, 300, "2026-10-19T09:00:00Z")};
+    network.routes["POST " + api + "/v2/reviews"] = {{422, "{}"}};
+    WaniKaniReviews reviews(dir.path(), nullptr, &network);
+    QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+    reviews.refresh("test-token");
+    QTRY_COMPARE(refreshed.count(), 1);
+    reviews.answer(*reviews.next(), true);
+    QTRY_COMPARE(network.posts().size(), 1);
+    // WaniKani keeps listing it; every scheduled refresh must not re-post.
+    for (int i = 0; i < 3; ++i) {
+      reviews.refresh("test-token");
+      QTest::qWait(50);
+    }
+    QCOMPARE(network.posts().size(), 1);
+    QCOMPARE(reviews.waiting(), 0);
+    QVERIFY(!reviews.next());
+  }
   void staleReviewIsNotSubmitted() {
     // WaniKani moved on (reviewed elsewhere, now due again, or not due yet):
     // the answers given here belong to a review that no longer exists.
