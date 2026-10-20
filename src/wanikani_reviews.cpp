@@ -395,6 +395,8 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
     item.assignmentId = v.toObject()["id"].toInt();
     item.availableAt = d["available_at"].toString();
     const int subjectId = d["subject_id"].toInt();
+    if (progress.contains(item.key()) && !sent.contains(item.key()))
+      kept[item.key()] = progress[item.key()];
     if (item.assignmentId <= 0 || !subjectById.contains(subjectId) ||
         sent.contains(item.key()))
       continue;
@@ -418,8 +420,6 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
     item.readingDone = saved["reading_done"].toBool();
     item.meaningMisses = saved["meaning_misses"].toInt();
     item.readingMisses = saved["reading_misses"].toInt();
-    if (progress.contains(item.key()))
-      kept[item.key()] = progress[item.key()];
     items.append(item);
   }
   std::stable_sort(items.begin(), items.end(),

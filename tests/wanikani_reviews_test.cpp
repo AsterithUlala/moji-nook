@@ -577,6 +577,29 @@ private slots:
     QTRY_COMPARE(thirdRefreshed.count(), 1);
     QCOMPARE(third.queue[0].meaningMisses, 0);
   }
+  void missingSubjectKeepsSavedProgress() {
+    QTemporaryDir dir;
+    QFile seed(dir.path() + "/wanikani_review_progress.json");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    seed.write(json({{"version", 1},
+                     {"items", QJsonObject{{"11@2026-10-19T09:00:00Z",
+                                            QJsonObject{{"assignment_id", 11},
+                                                        {"available_at", "2026-10-19T09:00:00Z"},
+                                                        {"meaning_misses", 2}}}}}}));
+    seed.close();
+    FakeNetwork network;
+    network.routes["GET " + api + "/v2/assignments"] = {
+        page({assignment(11, 100, "2026-10-19T09:00:00Z")})};
+    network.routes["GET " + api + "/v2/subjects"] = {page({})};
+    network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    WaniKaniReviews reviews(dir.path(), nullptr, &network);
+    QSignalSpy refreshed(&reviews, &WaniKaniReviews::refreshed);
+    reviews.refresh("test-token");
+    QTRY_COMPARE(refreshed.count(), 1);
+    QCOMPARE(reviews.waiting(), 0);
+    QVERIFY(seed.open(QIODevice::ReadOnly));
+    QVERIFY(seed.readAll().contains("11@2026-10-19T09:00:00Z"));
+  }
   void imageOnlyRadicalDownloadsWithoutToken() {
     QTemporaryDir dir;
     FakeNetwork network;
