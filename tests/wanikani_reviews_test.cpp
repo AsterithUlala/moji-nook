@@ -631,6 +631,31 @@ private slots:
     QTRY_COMPARE(thirdRefreshed.count(), 1);
     QCOMPARE(third.queue[0].meaningMisses, 0);
   }
+  void answerAfterStopIsStillSaved() {
+    QTemporaryDir dir;
+    FakeNetwork network;
+    network.routes["GET " + api + "/v2/assignments"] = {
+        page({assignment(11, 100, "2026-10-19T09:00:00Z")})};
+    network.routes["GET " + api + "/v2/subjects"] = {page({kanjiHouse()})};
+    network.routes["GET " + api + "/v2/study_materials"] = {page({})};
+    {
+      WaniKaniReviews first(dir.path(), nullptr, &network);
+      QSignalSpy refreshed(&first, &WaniKaniReviews::refreshed);
+      first.refresh("test-token");
+      QTRY_COMPARE(refreshed.count(), 1);
+      Challenge c = *first.next();
+      // A 401 on submit, or turning the mode off, empties the queue while
+      // the card is still open.
+      first.stop();
+      first.answer(c, false);
+    }
+    WaniKaniReviews second(dir.path(), nullptr, &network);
+    QSignalSpy refreshed(&second, &WaniKaniReviews::refreshed);
+    second.refresh("test-token");
+    QTRY_COMPARE(refreshed.count(), 1);
+    QCOMPARE(second.queue[0].meaningMisses + second.queue[0].readingMisses, 1);
+    QVERIFY(!second.queue[0].meaningDone && !second.queue[0].readingDone);
+  }
   void missingSubjectKeepsSavedProgress() {
     QTemporaryDir dir;
     QFile seed(dir.path() + "/wanikani_review_progress.json");

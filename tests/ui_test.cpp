@@ -2184,6 +2184,56 @@ private slots:
                  QColor(shown.pixel(x, y)).lightness() > 128;
     QVERIFY(inked);
   }
+  void wanikaniReviewAnswerIsSavedWhenGraded() {
+    QTemporaryDir dir;
+    Store store(dir.path());
+    App app(store, dir.path());
+    // The practice and settings-preview cards look alike here; grade the
+    // review on both and expect exactly one recorded miss.
+    QList<Card *> cards;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *candidate = qobject_cast<Card *>(window))
+        cards.append(candidate);
+    QCOMPARE(cards.size(), 2);
+    Challenge c;
+    c.subject.source = "wanikani";
+    c.subject.kind = "kanji";
+    c.subject.characters = "家";
+    c.subject.meanings = {"House"};
+    c.subject.readings = {"か"};
+    c.mode = Mode::Typing;
+    c.wanikaniReview = true;
+    c.event["wanikani_review"] = true;
+    c.event["assignment_id"] = 11;
+    c.event["available_at"] = "2026-10-19T09:00:00.000000Z";
+    c.event["subject_kind"] = "kanji";
+    const auto saved = [&] {
+      QFile f(dir.path() + "/wanikani_review_progress.json");
+      if (!f.open(QIODevice::ReadOnly))
+        return QJsonObject();
+      return QJsonDocument::fromJson(f.readAll())
+          .object()["items"]
+          .toObject()["11@2026-10-19T09:00:00.000000Z"]
+          .toObject();
+    };
+    const auto type = [](Card *card, const QString &text) {
+      card->findChild<QLineEdit *>("readingInput")->setText(text);
+      card->findChild<QPushButton *>("checkReading")->click();
+    };
+    for (auto *card : cards) {
+      card->present(c, 5);
+      type(card, "いえ");
+    }
+    QVERIFY2(saved().isEmpty(), "a retry shake is not a miss");
+    for (auto *card : cards)
+      type(card, "dog");
+    // Saved at grading, so quitting or crashing with the card open keeps it.
+    QCOMPARE(saved()["meaning_misses"].toInt(), 1);
+    QVERIFY(!saved()["meaning_done"].toBool());
+    for (auto *card : cards)
+      card->findChild<QPushButton *>("finishCard")->click();
+    QCOMPARE(saved()["meaning_misses"].toInt(), 1);
+  }
   void wanikaniReviewModeSetting() {
     QTemporaryDir dir;
     Store store(dir.path());

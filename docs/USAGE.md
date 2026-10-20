@@ -64,8 +64,8 @@ Review mode follows WaniKani's rules:
 - Dismissing a card sends nothing.
 
 Progress on each item, including misses, is saved in
-`wanikani_review_progress.json` in the data directory. Quitting before an item
-is finished keeps its misses. If WaniKani can't be reached, finished items wait
+`wanikani_review_progress.json` in the data directory as soon as each answer
+is checked. Quitting before an item is finished keeps its misses. If WaniKani can't be reached, finished items wait
 and are sent later. Moji Nook checks for new reviews about every five minutes
 and at the start of each hour. Radical answers are not counted in Moji Nook's
 local practice stats.

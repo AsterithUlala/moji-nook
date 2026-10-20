@@ -109,11 +109,13 @@ App::App(Store &s, const QString &path, QObject *parent)
           });
   connect(&card, &Card::dashboardRequested, this, &App::showDashboard);
   connect(&clock, &PracticeClock::due, this, &App::showCard);
+  // Recorded at grading, not on finish: a card can stay open until quit.
+  connect(&card, &Card::graded, this, [this](bool correct) {
+    reviews.answer(card.challenge, correct);
+  });
   connect(&card, &Card::completed, this,
           [this](Challenge c, int outcome, qint64 ms) {
             PerformanceSpan timing("complete-answer");
-            if (c.wanikaniReview && outcome >= 0)
-              reviews.answer(c, outcome == 1);
             // Radicals have no reading and no practice tile; keep them out of
             // local stats.
             const bool recordLocally =

@@ -167,6 +167,12 @@ QJsonObject progressEntry(const ReviewItem &item) {
           {"meaning_misses", item.meaningMisses},
           {"reading_misses", item.readingMisses}};
 }
+void restore(ReviewItem &item, const QJsonObject &saved) {
+  item.meaningDone = saved["meaning_done"].toBool();
+  item.readingDone = saved["reading_done"].toBool();
+  item.meaningMisses = saved["meaning_misses"].toInt();
+  item.readingMisses = saved["reading_misses"].toInt();
+}
 // SVG first: WaniKani now answers 403 for many PNG variants. PNG sizes nearest
 // 128 px remain the fallback where Qt lacks its SVG plugin.
 QList<QUrl> pictureUrls(const QJsonArray &images) {
@@ -417,11 +423,7 @@ void WaniKaniReviews::build(const QJsonArray &assignments,
         pictures[subjectId] =
             pictureUrls(resource["data"].toObject()["character_images"].toArray());
     }
-    const auto saved = progress[item.key()].toObject();
-    item.meaningDone = saved["meaning_done"].toBool();
-    item.readingDone = saved["reading_done"].toBool();
-    item.meaningMisses = saved["meaning_misses"].toInt();
-    item.readingMisses = saved["reading_misses"].toInt();
+    restore(item, progress[item.key()].toObject());
     items.append(item);
   }
   std::stable_sort(items.begin(), items.end(),
@@ -522,23 +524,38 @@ std::optional<Challenge> WaniKaniReviews::next() {
   c.event["wanikani_review"] = true;
   c.event["assignment_id"] = item.assignmentId;
   c.event["available_at"] = item.availableAt;
+  c.event["subject_kind"] = item.subject.kind;
   return c;
 }
 
+// Saved even when the item has left the queue (mode turned off, token
+// rejected), so a miss is never lost before the item is sent.
 void WaniKaniReviews::answer(const Challenge &c, bool correct) {
   if (!c.wanikaniReview)
     return;
-  for (auto &item : queue) {
-    if (item.assignmentId != c.event["assignment_id"].toInt() ||
-        item.availableAt != c.event["available_at"].toString() ||
-        item.complete())
-      continue;
-    item.record(c.reading, correct);
-    progress[item.key()] = progressEntry(item);
-    saveProgress();
+  ReviewItem item;
+  item.assignmentId = c.event["assignment_id"].toInt();
+  item.availableAt = c.event["available_at"].toString();
+  item.subject.kind = c.event["subject_kind"].toString();
+  const auto key = item.key();
+  if (settled.contains(key))
+    return;
+  const auto queued =
+      std::find_if(queue.begin(), queue.end(),
+                   [&key](const ReviewItem &i) { return i.key() == key; });
+  if (queued != queue.end())
+    item = *queued;
+  else
+    restore(item, progress[key].toObject());
+  if (item.complete())
+    return;
+  item.record(c.reading, correct);
+  progress[key] = progressEntry(item);
+  saveProgress();
+  if (queued != queue.end()) {
+    *queued = item;
     if (item.complete())
       submitNext();
-    return;
   }
 }
 
