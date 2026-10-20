@@ -416,10 +416,30 @@ void App::buildDashboard() {
     tokenInput->clear();
     tokenInput->setPlaceholderText(
         "Token saved · paste here only to replace it");
+    if (reviewMode->isChecked()) {
+      reviewStatus->setText("Checking token…");
+      reviews.checkAccess(readToken());
+    }
     syncNow();
   });
-  form->addWidget(label(
-      "Read-only access · token and practice history stay local.", "muted"));
+  reviewMode = new SettingsCheckBox("Do WaniKani reviews here");
+  reviewMode->setObjectName("wanikaniReviewMode");
+  reviewMode->setToolTip(
+      "When WaniKani has reviews waiting, Moji Nook asks those instead of "
+      "practice cards. You type every answer and WaniKani's rules grade it. "
+      "Each finished item is sent to WaniKani and moves its SRS stage, just "
+      "like reviewing on the site. Lessons are never started. Needs a token "
+      "with the reviews:create permission.");
+  reviewMode->setChecked(settings.value("wanikani/reviewMode", false).toBool());
+  form->addWidget(reviewMode);
+  reviewStatus = label({}, "muted");
+  reviewStatus->setObjectName("wanikaniReviewStatus");
+  reviewStatus->setAccessibleName("WaniKani reviews status");
+  reviewStatus->hide();
+  form->addWidget(reviewStatus);
+  accessNote = label(
+      "Read-only access · token and practice history stay local.", "muted");
+  form->addWidget(accessNote);
   form = practiceForm;
   auto *mixSummary = label({}, "muted");
   auto *advancedToggle =

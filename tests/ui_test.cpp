@@ -2166,6 +2166,42 @@ private slots:
     QCOMPARE(kind->text(), QString("Radical"));
     QVERIFY(kind->isVisible());
   }
+  void wanikaniReviewModeSetting() {
+    QTemporaryDir dir;
+    Store store(dir.path());
+    {
+      App app(store, dir.path());
+      QCheckBox *toggle = nullptr;
+      for (auto *window : qApp->topLevelWidgets())
+        if (auto *candidate = window->findChild<QCheckBox *>("wanikaniReviewMode"))
+          toggle = candidate;
+      QVERIFY(toggle);
+      QCOMPARE(toggle->text(), QString("Do WaniKani reviews here"));
+      QVERIFY(!toggle->isChecked());
+      QVERIFY(toggle->toolTip().startsWith("When WaniKani has reviews waiting"));
+      QVERIFY(toggle->toolTip().endsWith("Needs a token with the reviews:create permission."));
+      auto *status = toggle->parentWidget()->findChild<QLabel *>("wanikaniReviewStatus");
+      QVERIFY(status);
+      // Without a token the probe fails, so the mode never turns on.
+      toggle->click();
+      QVERIFY(!toggle->isChecked());
+      QVERIFY(status->text().contains("token"));
+      QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+      QVERIFY(!saved.value("wanikani/reviewMode", false).toBool());
+    }
+    QSettings saved(dir.path() + "/settings.ini", QSettings::IniFormat);
+    saved.setValue("wanikani/reviewMode", true);
+    saved.sync();
+    App app(store, dir.path());
+    app.start(false, true);
+    QLabel *note = nullptr;
+    for (auto *window : qApp->topLevelWidgets())
+      for (auto *label : window->findChildren<QLabel *>())
+        if (label->text().startsWith("Reviews mode on"))
+          note = label;
+    QVERIFY(note);
+    QCOMPARE(note->text(), QString("Reviews mode on · finished items are sent to WaniKani."));
+  }
   void emptyTokenDoesNotClaimSaved() {
     QTemporaryDir dir;
     Store store(dir.path());

@@ -5,6 +5,7 @@
 #include "feedback.h"
 #include "modes.h"
 #include "sync.h"
+#include "wanikani_reviews.h"
 #include "speech.h"
 #include "progression_popup.h"
 #include "theme.h"
@@ -114,6 +115,7 @@ private:
   QString directory;
   QSettings settings;
   Sync sync;
+  WaniKaniReviews reviews;
   AnkiSource anki;
   AnkiPanel *ankiPanel;
   Picker picker;
@@ -154,6 +156,11 @@ private:
   QAction *snoozeAction = nullptr;
   QDateTime lastSyncAt, lastAutoAttempt;
   QLineEdit *tokenInput;
+  QCheckBox *reviewMode;
+  QLabel *reviewStatus, *accessNote;
+  bool reviewModeOn() const;
+  void applyReviewMode();
+  void connectReviews();
   QSpinBox *interval;
   QSpinBox *sessionCount;
   QSpinBox *snoozeLength;
