@@ -5,10 +5,11 @@ work, read, or play. A compact card appears in the corner of your screen at an
 interval you choose. Answer a couple of cards, then carry on with your day.
 
 It reinforces the kanji and vocabulary you have already learned in WaniKani,
-fitting extra practice into the gaps in your day without stealing focus, and it
-never changes your WaniKani progress.
+fitting extra practice into the gaps in your day without stealing focus.
+Practice never changes your WaniKani progress. If you want, an optional review
+mode lets you clear your WaniKani reviews on the same cards.
 
-> **Early alpha (0.1.2).** Expect rough edges. Tested on Linux x86_64 with KDE
+> **Early alpha (0.2.0).** Expect rough edges. Tested on Linux x86_64 with KDE
 > Plasma on Wayland. See [Get started](#get-started) and please
 > [report problems](https://github.com/AsterithUlala/moji-nook/issues).
 
@@ -28,6 +29,10 @@ Nook itself waits in the system tray.*
 - **Extra attention where it helps:** words you have found difficult get more attention in the mix.
 - **A record of practice:** each word earns a tile once you have recalled it on
   separate days and after gaps. Tiles persist through mistakes and breaks.
+- **Optional WaniKani reviews:** turn on **Do WaniKani reviews here** and your
+  due reviews come first. You type every answer, Moji Nook grades it by
+  WaniKani's rules, and finished reviews are sent to WaniKani. Lessons are never started.
+  See [review mode](docs/USAGE.md#do-wanikani-reviews-in-moji-nook-optional).
 
 <p>
   <img src="docs/previews/practice-prompt.png" alt="Compact Moji Nook reading prompt with a Reveal answer button" width="352">
@@ -124,8 +129,9 @@ WaniKani, and choose **Practice now**.
 ## Your data and privacy
 
 Moji Nook is an independent companion, unaffiliated with WaniKani or Anki. It
-only reads from WaniKani and Anki: it never submits WaniKani reviews and never
-changes Anki schedules. Your word cache and practice history stay on your
+only reads from WaniKani and Anki, and it never changes Anki schedules. The one
+exception is WaniKani review mode, which is off by default: when you turn it on,
+the reviews you finish are submitted to WaniKani. Moji Nook never starts lessons. Your word cache and practice history stay on your
 computer. There is no cloud account, analytics service, or cross-device sync.
 
 Practice works offline from the local cache. While it is running and online,
@@ -135,7 +141,7 @@ unencrypted in a file only your user account can read. See
 
 ## Documentation
 
-- [Installation](docs/INSTALL.md) and [usage](docs/USAGE.md).
+- [Installation](docs/INSTALL.md), [usage](docs/USAGE.md), and the [changelog](CHANGELOG.md).
 - [Speech engines and attribution](docs/SPEECH.md).
 - [Build and test](docs/INSTALL.md#clone-and-build) and [contributing](CONTRIBUTING.md).
 
