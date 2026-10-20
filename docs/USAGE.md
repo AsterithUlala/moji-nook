@@ -53,10 +53,10 @@ Review mode follows WaniKani's rules:
   meaning. Kanji and vocabulary ask both the meaning and the reading.
 - Small meaning typos are accepted, as on WaniKani. Answers in WaniKani's
   blocked-meaning list are wrong.
-- A reading typed as a meaning, a verb meaning typed without "to", Latin
-  letters left in a reading, or a kanji reading of the wrong type (on'yomi or
-  kun'yomi) asks again without a miss. A leading "the" or "a" is graded as
-  typed, unlike practice cards.
+- A reading typed as a meaning (in kana or romaji), a verb meaning typed
+  without "to", Latin letters left in a reading, or a kanji reading of the
+  wrong type (on'yomi or kun'yomi) asks again without a miss. A leading "the"
+  or "a" is graded as typed, unlike practice cards.
 - A wrong answer counts as a miss, and that half of the item comes back later.
 - When both halves are answered correctly, Moji Nook sends the review to
   WaniKani with its miss counts and shows the new SRS stage.

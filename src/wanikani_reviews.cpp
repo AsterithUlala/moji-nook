@@ -94,6 +94,13 @@ ReviewCheck checkReviewAnswer(const Subject &subject, bool reading,
         return {ReviewVerdict::Retry,
                 "This meaning is a verb. Start it with “to”."};
     }
+    auto spoken = subject.readings;
+    if (subject.kind == "kana_vocabulary")
+      spoken.append(subject.characters);
+    for (const auto &r : spoken)
+      if (toKana(text) == toKana(r))
+        return {ReviewVerdict::Retry,
+                "WaniKani wants the meaning, not the reading."};
     return {ReviewVerdict::Incorrect, {}};
   }
   const auto kana = toKana(text);

@@ -276,6 +276,17 @@ private slots:
     QCOMPARE(check.hint, QString("WaniKani wants the meaning, not the reading."));
     QCOMPARE(meaning(s, "人"), ReviewVerdict::Retry);
   }
+  void romajiReadingInMeaningAsksAgain() {
+    const auto dog = subject("kanji", {"Dog"}, {"いぬ"});
+    const auto check = checkReviewAnswer(dog, false, "inu");
+    QCOMPARE(check.verdict, ReviewVerdict::Retry);
+    QCOMPARE(check.hint, QString("WaniKani wants the meaning, not the reading."));
+    QCOMPARE(meaning(dog, "inn"), ReviewVerdict::Incorrect);
+    QCOMPARE(meaning(dog, "dog"), ReviewVerdict::Correct);
+    auto kana = subject("kana_vocabulary", {"A Little"});
+    kana.characters = "ちょっと";
+    QCOMPARE(meaning(kana, "chotto"), ReviewVerdict::Retry);
+  }
   void readings() {
     const auto s = subject("vocabulary", {"Person"}, {"ひと"});
     QCOMPARE(reading(s, "hito"), ReviewVerdict::Correct);
