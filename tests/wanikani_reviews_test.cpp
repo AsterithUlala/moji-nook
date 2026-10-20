@@ -250,6 +250,25 @@ private slots:
     QCOMPARE(meaning(s, "weak"), ReviewVerdict::Incorrect);
     QCOMPARE(meaning(s, "week"), ReviewVerdict::Correct);
   }
+  void articlesAreNotDropped() {
+    const auto dog = subject("kanji", {"Dog"});
+    QCOMPARE(meaning(dog, "dog"), ReviewVerdict::Correct);
+    QCOMPARE(meaning(dog, "the dog"), ReviewVerdict::Incorrect);
+    QCOMPARE(meaning(dog, "a dog"), ReviewVerdict::Incorrect);
+    const auto go = subject("vocabulary", {"To Go"});
+    QCOMPARE(meaning(go, "to go"), ReviewVerdict::Correct);
+    QCOMPARE(meaning(go, "to goo"), ReviewVerdict::Correct);
+    // A verb answered without "to" asks again instead of passing.
+    const auto bare = checkReviewAnswer(go, false, "go");
+    QCOMPARE(bare.verdict, ReviewVerdict::Retry);
+    QCOMPARE(bare.hint, QString("This meaning is a verb. Start it with “to”."));
+    QCOMPARE(meaning(go, "went"), ReviewVerdict::Incorrect);
+    QCOMPARE(meaning(go, "do"), ReviewVerdict::Incorrect);
+    QCOMPARE(checkReviewAnswer(subject("vocabulary", {"To Remember"}), false, "rememebr").verdict,
+             ReviewVerdict::Retry);
+    // Practice cards keep their lenient matching.
+    QCOMPARE(normalizeMeaning("the dog"), QString("dog"));
+  }
   void kanaInMeaningAsksAgain() {
     const auto s = subject("vocabulary", {"Person"}, {"ひと"});
     const auto check = checkReviewAnswer(s, false, "ひと");

@@ -35,6 +35,18 @@ int distance(const QString &a, const QString &b) {
   }
   return row[b.size()];
 }
+// Like practice's normalizeMeaning, but WaniKani grades "the dog" against
+// "Dog" as typed, so no leading article is dropped.
+QString reviewMeaning(QString s) {
+  static const QRegularExpression punctuation("[^\\p{L}\\p{N}]+");
+  s = s.normalized(QString::NormalizationForm_KC).toCaseFolded();
+  s.replace(punctuation, " ");
+  return s.simplified();
+}
+bool typoMatch(const QString &answer, const QString &candidate) {
+  return distance(answer, candidate) <=
+         meaningTypoTolerance(int(candidate.size()));
+}
 QString readingTypeName(const QString &kind) {
   return kind == "onyomi"    ? QString("on’yomi")
          : kind == "kunyomi" ? QString("kun’yomi")
@@ -63,21 +75,24 @@ ReviewCheck checkReviewAnswer(const Subject &subject, bool reading,
     if (hasJapanese(text))
       return {ReviewVerdict::Retry,
               "WaniKani wants the meaning, not the reading."};
-    const auto answer = normalizeMeaning(text);
+    const auto answer = reviewMeaning(text);
     for (const auto &m : subject.meanings)
-      if (answer == normalizeMeaning(m))
+      if (answer == reviewMeaning(m))
         return {ReviewVerdict::Correct, {}};
     for (const auto &m : subject.blacklist)
-      if (answer == normalizeMeaning(m))
+      if (answer == reviewMeaning(m))
         return {ReviewVerdict::Incorrect, {}};
     static const QRegularExpression digit("\\d");
     if (answer.contains(digit))
       return {ReviewVerdict::Incorrect, {}};
-    for (const auto &m : subject.meanings) {
-      const auto candidate = normalizeMeaning(m);
-      if (distance(answer, candidate) <=
-          meaningTypoTolerance(int(candidate.size())))
+    for (const auto &m : subject.meanings)
+      if (typoMatch(answer, reviewMeaning(m)))
         return {ReviewVerdict::Correct, {}};
+    for (const auto &m : subject.meanings) {
+      const auto candidate = reviewMeaning(m);
+      if (candidate.startsWith("to ") && typoMatch(answer, candidate.mid(3)))
+        return {ReviewVerdict::Retry,
+                "This meaning is a verb. Start it with “to”."};
     }
     return {ReviewVerdict::Incorrect, {}};
   }
