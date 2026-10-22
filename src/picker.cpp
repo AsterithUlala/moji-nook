@@ -2,23 +2,6 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
-static int editDistance(const QString &a, const QString &b) {
-  QVector<int> row(b.size() + 1);
-  for (int j = 0; j <= b.size(); ++j)
-    row[j] = j;
-  for (int i = 1; i <= a.size(); ++i) {
-    int diagonal = row[0];
-    row[0] = i;
-    for (int j = 1; j <= b.size(); ++j) {
-      int old = row[j];
-      row[j] = qMin(qMin(row[j] + 1, row[j - 1] + 1),
-                    diagonal + (a[i - 1] != b[j - 1]));
-      diagonal = old;
-    }
-  }
-  return row.last();
-}
-
 QStringList Picker::distractors(const Subject &s, bool reading,
                                 const QVector<Subject> &pool) {
   struct Candidate {

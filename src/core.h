@@ -20,6 +20,7 @@ struct Subject {
 
 QString normalizeMeaning(QString text);
 QString toKana(QString text);
+int editDistance(const QString &a, const QString &b);
 double stageWeight(int stage);
 QString stageName(int stage);
 QVector<Subject> parseSubjects(const QJsonArray &subjects,
@@ -41,6 +42,7 @@ struct Challenge {
   }
   bool accepts(const QString &text) const;
   QString readingRetryHint(const QString &text) const;
+  bool nearMiss(const QString &text) const;
 };
 
 struct SkillEvidence {

@@ -204,6 +204,36 @@ private slots:
     QCOMPARE(toKana("nna"), QString("んな"));
     QCOMPARE(toKana("shin'you"), QString("しんよう"));
   }
+  void nearMissSpelling() {
+    Challenge c;
+    c.mode = Mode::Typing;
+    c.reading = true;
+    c.subject.readings = {"しょう"};
+    QVERIFY(c.nearMiss("しよう"));
+    QVERIFY(c.nearMiss("shiyou"));
+    QVERIFY(c.nearMiss("ショ"));
+    QVERIFY(!c.nearMiss("しょう"));
+    QVERIFY(!c.nearMiss("shou"));
+    QVERIFY(!c.nearMiss("しゅ"));
+    QVERIFY(!c.nearMiss(""));
+    c.subject.readings = {"でんしゃ"};
+    QVERIFY(c.nearMiss("でんしや"));
+    QVERIFY(c.nearMiss("densiya"));
+    QVERIFY(!c.nearMiss("てんしや"));
+    c.subject.readings = {"ひ", "にち"};
+    QVERIFY(!c.nearMiss("き"));
+    QVERIFY(!c.nearMiss("ひと"));
+    QVERIFY(c.nearMiss("にく"));
+    c.subject.readings = {"こう", "ごう"};
+    QVERIFY(!c.nearMiss("ごう"));
+    QVERIFY(c.nearMiss("こ"));
+    c.mode = Mode::Choice;
+    QVERIFY(!c.nearMiss("こ"));
+    c.mode = Mode::Typing;
+    c.reading = false;
+    c.subject.meanings = {"Day"};
+    QVERIFY(!c.nearMiss("Dat"));
+  }
   void excludesUnstartedHiddenAndRestricted() {
     QJsonArray subjects, assignments;
     for (int id = 1; id <= 5; ++id) {

@@ -110,6 +110,23 @@ QString toKana(QString s) {
   return out;
 }
 
+int editDistance(const QString &a, const QString &b) {
+  QVector<int> row(b.size() + 1);
+  for (int j = 0; j <= b.size(); ++j)
+    row[j] = j;
+  for (int i = 1; i <= a.size(); ++i) {
+    int diagonal = row[0];
+    row[0] = i;
+    for (int j = 1; j <= b.size(); ++j) {
+      int old = row[j];
+      row[j] = qMin(qMin(row[j] + 1, row[j - 1] + 1),
+                    diagonal + (a[i - 1] != b[j - 1]));
+      diagonal = old;
+    }
+  }
+  return row.last();
+}
+
 double stageWeight(int s) {
   return s < 1 || s > 9 ? 0
          : s <= 4       ? 4
@@ -231,6 +248,18 @@ bool Challenge::accepts(const QString &text) const {
     if (reading ? toKana(text) == toKana(a)
                 : normalizeMeaning(text) == normalizeMeaning(a))
       return true;
+  return false;
+}
+
+bool Challenge::nearMiss(const QString &text) const {
+  if (!reading || mode != Mode::Typing || accepts(text))
+    return false;
+  const QString kana = toKana(text);
+  for (const auto &r : subject.readings) {
+    const QString accepted = toKana(r);
+    if (accepted.size() >= 2 && editDistance(kana, accepted) == 1)
+      return true;
+  }
   return false;
 }
 
