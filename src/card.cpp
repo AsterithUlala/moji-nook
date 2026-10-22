@@ -803,8 +803,8 @@ void Card::revealAnswer() {
   input->setEnabled(false);
   input->hide();
   kana->hide();
-  showSubmitted(attempt, matched ? "Your answer · Matches" : "Your answer",
-                false);
+  showSubmitted(challenge.reading ? toKana(attempt) : attempt,
+                matched ? "Your answer · Matches" : "Your answer", false);
   showAnswer();
   if (engaged && isActiveWindow())
     (matched ? remember : miss)->setFocus(Qt::OtherFocusReason);

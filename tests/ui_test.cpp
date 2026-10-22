@@ -1661,7 +1661,7 @@ private slots:
     QVERIFY(remember->isVisible() && miss->isVisible());
     QVERIFY(!input->isVisible());
     QVERIFY(submitted->isVisible());
-    QCOMPARE(submitted->text(), QString("nihon"));
+    QCOMPARE(submitted->text(), QString("にほん"));
     QCOMPARE(caption->text(), QString("Your answer · Matches"));
     QVERIFY(!typo->isVisible());
     miss->click();
