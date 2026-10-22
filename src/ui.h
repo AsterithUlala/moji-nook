@@ -61,10 +61,10 @@ protected:
 private:
   QLabel *meta, *challengeType, *supplement, *characters, *frontContext,
       *prompt, *answer, *context, *feedback, *hint, *kana, *submitted,
-      *answerCaption, *missIcon;
+      *submittedCaption, *answerCaption, *missIcon;
   QLineEdit *input;
   QPushButton *reveal, *check, *remember, *miss, *done, *dismiss,
-      *exampleToggle, *listen;
+      *exampleToggle, *listen, *typo;
   QLabel *voiceCaption;
   QLabel *wordProgress, *wordKind;
   ChallengeMark *challengeMark;

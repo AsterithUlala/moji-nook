@@ -92,7 +92,7 @@ QString appStyle(int theme) {
         QLabel { background:transparent; }
         QLabel#eyebrow { color:#e8b28d; font-size:12px; font-weight:600; }
         QLabel#word { font-family:'Noto Sans CJK JP'; font-size:58px; font-weight:500; }
-        QLabel#muted { color:#a9bcb0; font-size:12px; }
+        QLabel#muted, QLabel#submittedCaption { color:#a9bcb0; font-size:12px; }
         QLabel#answer { color:#a6e2bf; font-size:23px; }
         QPushButton { background:#293e33; border:1px solid #476151; border-radius:8px; padding:10px 14px; }
         QPushButton:hover { background:#395744; border-color:#93b69c; }
@@ -237,6 +237,8 @@ QString appStyle(int theme) {
     QPushButton#cardBrand:focus { border:0; color:$text; font-weight:600; }
     QPushButton#cardBrand:focus:pressed { border:1px solid $action; }
     QPushButton#listenPronunciation, QPushButton#exampleToggle { font-size:12px; }
+    QPushButton#countAsCorrect { font-size:12px; border:2px solid transparent; }
+    QPushButton#countAsCorrect:focus { border-color:$accent; }
   )")
              .replace("$posterInk", c.posterInk)
              .replace("$actionInk", c.actionInk)

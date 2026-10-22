@@ -1576,6 +1576,79 @@ private slots:
     QCOMPARE(logged.event["reading_retries"].toArray().size(), 1);
     QVERIFY(logged.event["near_miss_retry"].toBool());
   }
+  void typoOverrideCountsAsCorrect() {
+    Card card;
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    QVERIFY(typo && caption);
+    card.present(c, 5);
+    QVERIFY(!typo->isVisible());
+    input->setText("sakana");
+    check->click();
+    QVERIFY(typo->isVisible());
+    QCOMPARE(typo->text(), QString("I made a typo"));
+    QCOMPARE(typo->accessibleName(), QString("Count this answer as correct"));
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    typo->click();
+    QVERIFY(!typo->isVisible());
+    QCOMPARE(caption->text(), QString("Counted as correct"));
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.first().first().toBool());
+    QVERIFY(graded.last().first().toBool());
+    typo->click();
+    QCOMPARE(graded.count(), 2);
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["overridden"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("sakana"));
+    QTemporaryDir directory;
+    Store store(directory.path());
+    QVERIFY(store.record(logged, outcome == 1, 0));
+    QSqlQuery q(store.db);
+    QVERIFY(q.exec("SELECT correct, event_json FROM attempts"));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toInt(), 1);
+    const auto saved = QJsonDocument::fromJson(q.value(1).toByteArray()).object();
+    QCOMPARE(saved["outcome"].toString(), QString("correct"));
+    QCOMPARE(saved["grading"].toString(), QString("checked"));
+    QVERIFY(saved["overridden"].toBool());
+
+    card.present(c, 5);
+    input->setText("sakana");
+    check->click();
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("overridden"));
+    card.present(c, 5);
+    input->setText(c.subject.reading());
+    check->click();
+    QVERIFY(!typo->isVisible());
+    Challenge choice = c;
+    choice.mode = Mode::Choice;
+    choice.choices = {"にほん", "ほんじつ", "まいにち", "きゅうじつ"};
+    card.present(choice, 5);
+    for (auto *b : card.findChildren<QPushButton *>())
+      if (b->property("answer").toString() == "ほんじつ")
+        b->click();
+    QVERIFY(card.findChild<QLabel *>("submittedAnswer")->isVisible());
+    QVERIFY(!typo->isVisible());
+    card.close();
+  }
   void practiceTogglesReachCards() {
     QTemporaryDir directory;
     Store store(directory.path());

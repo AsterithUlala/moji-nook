@@ -134,7 +134,8 @@ Card::Card(QWidget *parent)
   auto *submittedGroup = new QVBoxLayout(submittedRow);
   submittedGroup->setContentsMargins(0, 0, 0, 0);
   submittedGroup->setSpacing(4);
-  auto *submittedCaption = label("Incorrect", "muted");
+  submittedCaption = label("Incorrect", "muted");
+  submittedCaption->setObjectName("submittedCaption");
   submittedCaption->setAlignment(Qt::AlignCenter);
   submittedGroup->addWidget(submittedCaption);
   // Centered like the correct-answer row below so the two read as a pair.
@@ -143,6 +144,9 @@ Card::Card(QWidget *parent)
   submitted = label({}, "submittedAnswer");
   missIcon = new FeedbackIconLabel(submitted);
   missIcon->setAccessibleName("Incorrect answer");
+  auto missPolicy = missIcon->sizePolicy();
+  missPolicy.setRetainSizeWhenHidden(true);
+  missIcon->setSizePolicy(missPolicy);
   submittedLayout->addStretch();
   submittedLayout->addWidget(missIcon, 0, Qt::AlignVCenter);
   submittedLayout->addWidget(submitted);
@@ -150,6 +154,10 @@ Card::Card(QWidget *parent)
                                            QSizePolicy::Minimum));
   submittedLayout->addStretch();
   layout->addWidget(submittedRow);
+  typo = button("I made a typo", "quiet");
+  typo->setObjectName("countAsCorrect");
+  typo->setAccessibleName("Count this answer as correct");
+  layout->addWidget(typo, 0, Qt::AlignHCenter);
   answerCaption = label("Correct answer", "muted");
   answerCaption->setAlignment(Qt::AlignCenter);
   layout->addWidget(answerCaption);
@@ -244,6 +252,21 @@ Card::Card(QWidget *parent)
     finish();
   });
   connect(done, &QPushButton::clicked, this, [this] { finish(); });
+  connect(typo, &QPushButton::clicked, this, [this] {
+    if (!pending || result != 0)
+      return;
+    result = 1;
+    challenge.event["overridden"] = true;
+    submittedCaption->setText("Counted as correct");
+    missIcon->hide();
+    if (typo->hasFocus())
+      done->setFocus(Qt::OtherFocusReason);
+    typo->hide();
+    fitCard();
+    if (!reducedMotion)
+      accent->pulse(colors(themeIndex).accent, 320);
+    emit graded(true);
+  });
   auto submit = [this] {
     if (!resolved && !input->text().trimmed().isEmpty())
       grade(challenge.accepts(input->text()), input->text());
@@ -530,7 +553,7 @@ void Card::present(const Challenge &c, int minutes) {
   }
   for (QWidget *w :
        QList<QWidget *>{answer, feedback, supplement, context, miss, remember,
-                        done, submittedRow, answerCaption, exampleToggle})
+                        done, submittedRow, answerCaption, exampleToggle, typo})
     w->hide();
   answer->parentWidget()->hide();
   exampleToggle->setChecked(false);
@@ -767,8 +790,11 @@ void Card::grade(bool correct, const QString &response) {
   kana->hide();
   submitted->setText(response);
   submitted->setAccessibleName("Your answer: " + response);
+  submittedCaption->setText("Incorrect");
+  missIcon->show();
   submittedRow->setVisible(!correct);
   answerCaption->setVisible(!correct);
+  typo->setVisible(!correct && challenge.mode == Mode::Typing);
   check->hide();
   choiceArea->hide();
   showAnswer();
