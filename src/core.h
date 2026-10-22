@@ -3,6 +3,10 @@
 #include <QtSql>
 #include <optional>
 
+struct RelatedKanji {
+  QString characters, meaning, reading;
+};
+
 struct Subject {
   int id = 0, stage = 0, level = 0;
   QString kind, characters, url, contextJa, contextEn, readingKind;
@@ -14,12 +18,16 @@ struct Subject {
   QString source = "wanikani", sourceId, deck;
   QJsonObject sourceData;
   QString wordAudio, sentenceAudio, picture, notes;
+  QString meaningMnemonic, readingMnemonic;
+  QList<RelatedKanji> similarKanji;
   QString meaning() const { return meanings.value(0); }
   QString reading() const { return readings.value(0); }
 };
 
 QString normalizeMeaning(QString text);
 QString toKana(QString text);
+QString mnemonicHtml(const QString &text);
+int editDistance(const QString &a, const QString &b);
 double stageWeight(int stage);
 QString stageName(int stage);
 QVector<Subject> parseSubjects(const QJsonArray &subjects,
@@ -41,6 +49,7 @@ struct Challenge {
   }
   bool accepts(const QString &text) const;
   QString readingRetryHint(const QString &text) const;
+  bool nearMiss(const QString &text) const;
 };
 
 struct SkillEvidence {

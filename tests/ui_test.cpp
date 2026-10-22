@@ -807,6 +807,7 @@ private slots:
     speech.configure(true, "mei", 35, 1.0);
     QSignalSpy generated(&speech, &JapaneseSpeech::generated);
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setSpeech(&speech, true, false, true); // Missing recordings fall back locally.
     card.setAnkiAudio(false, 0);
     Challenge c;
@@ -1048,7 +1049,9 @@ private slots:
       QVERIFY(active);
       QCOMPARE(active->challenge.subject.source,
                selection == "wanikani" ? QString("wanikani") : QString("anki"));
+      active->findChild<QLineEdit *>("readingInput")->setText("x");
       active->findChild<QPushButton *>("revealAnswer")->click();
+      QVERIFY(active->findChild<QPushButton *>("markRemembered")->isVisible());
       active->findChild<QPushButton *>("markRemembered")->click();
       saved.sync();
       QCOMPARE(saved.value("practice/source").toString(), selection);
@@ -1164,6 +1167,7 @@ private slots:
     QVERIFY(frontContext->isVisible());
     QCOMPARE(frontContext->text(), "出来ます。");
     QVERIFY(!frontContext->text().contains("It can be done."));
+    card.findChild<QLineEdit *>("readingInput")->setText("dekiru");
     card.findChild<QPushButton *>("revealAnswer")->click();
     QVERIFY(card.findChild<AnkiDetails *>()->isVisible());
     QVERIFY(!card.findChild<QPushButton *>("exampleToggle")->isVisible());
@@ -1533,6 +1537,417 @@ private slots:
     c.mode = Mode::Choice;
     QVERIFY(c.readingRetryHint("ashi").isEmpty());
   }
+  void nearMissGetsOneRetry() {
+    Card card;
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "電車";
+    c.subject.meanings = {"Train"};
+    c.subject.readings = {"でんしゃ"};
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *warning = card.findChild<QLabel *>("readingWarning");
+    auto *answer = card.findChild<QLabel *>("answer");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    const QString almost = "Almost. Check your spelling and try again.";
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    QVERIFY(warning->isVisible());
+    QCOMPARE(warning->text(), almost);
+    QVERIFY(input->isVisible() && input->isEnabled());
+    QCOMPARE(input->text(), QString("densiya"));
+    QVERIFY(!answer->isVisible());
+    input->setText("densha");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("densha"));
+
+    card.present(c, 5);
+    input->setText("でんしや");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    check->click();
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.last().first().toBool());
+    QVERIFY(!warning->isVisible());
+    QVERIFY(answer->isVisible());
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+
+    card.setNearMissRetries(false);
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 3);
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("near_miss_retry"));
+    card.setNearMissRetries(true);
+
+    c.subject.kind = "kanji";
+    c.subject.characters = "日";
+    c.subject.readings = {"にち"};
+    c.subject.readingKind = "onyomi";
+    c.subject.kanjiReadingTypes = {
+        {"にち", "onyomi"}, {"ひ", "kunyomi"}, {"にく", "kunyomi"}};
+    card.present(c, 5);
+    input->setText("niku");
+    check->click();
+    QVERIFY(warning->text().contains("on’yomi"));
+    check->click();
+    QCOMPARE(warning->text(), almost);
+    QCOMPARE(graded.count(), 3);
+    check->click();
+    QCOMPARE(graded.count(), 4);
+    QVERIFY(!graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(logged.event["reading_retries"].toArray().size(), 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+  }
+  void typeBeforeRevealGatesRecall() {
+    Card card;
+    card.setStyleSheet(appStyle());
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Recall;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *kana = card.findChild<QLabel *>("kanaPreview");
+    auto *reveal = card.findChild<QPushButton *>("revealAnswer");
+    auto *remember = card.findChild<QPushButton *>("markRemembered");
+    auto *miss = card.findChild<QPushButton *>("markMissed");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *submitted = card.findChild<QLabel *>("submittedAnswer");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    QVERIFY(!input->hasFocus());
+    QCOMPARE(input->placeholderText(), QString("Type your answer, then reveal"));
+    QVERIFY(!reveal->isEnabled());
+    reveal->click();
+    QVERIFY(!remember->isVisible());
+    input->setText("   ");
+    QVERIFY(!reveal->isEnabled());
+    QTest::keyClick(input, Qt::Key_Return);
+    QVERIFY(!remember->isVisible());
+    input->setText("nihon");
+    QVERIFY(reveal->isEnabled());
+    QVERIFY(kana->isVisible());
+    QCOMPARE(kana->text(), QString("にほん"));
+    QTest::keyClick(input, Qt::Key_Return);
+    QCOMPARE(outcome, -9);
+    QVERIFY(remember->isVisible() && miss->isVisible());
+    QVERIFY(!input->isVisible());
+    QVERIFY(submitted->isVisible());
+    QCOMPARE(submitted->text(), QString("nihon"));
+    QCOMPARE(caption->text(), QString("Your answer · Matches"));
+    QVERIFY(!typo->isVisible());
+    miss->click();
+    QCOMPARE(outcome, 0);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("nihon"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(true));
+
+    c.reading = false;
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    input->setText("Dog");
+    QVERIFY(!kana->isVisible());
+    reveal->click();
+    QCOMPARE(caption->text(), QString("Your answer"));
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("Dog"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(false));
+
+    c.reading = true;
+    card.present(c, 5);
+    QCoreApplication::processEvents();
+    const int recallHeight = card.height();
+    Challenge typed = c;
+    typed.mode = Mode::Typing;
+    card.present(typed, 5);
+    QCoreApplication::processEvents();
+    QVERIFY(recallHeight <= card.height());
+
+    card.setTypeBeforeReveal(false);
+    card.present(c, 5);
+    QVERIFY(!input->isVisible());
+    QVERIFY(reveal->isEnabled());
+    card.setTypeBeforeReveal(true);
+    reveal->click();
+    QVERIFY(remember->isVisible());
+    QVERIFY(!submitted->isVisible());
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(!logged.event.contains("recall_attempt"));
+    QVERIFY(!logged.event.contains("recall_attempt_matched"));
+  }
+  void typoOverrideCountsAsCorrect() {
+    Card card;
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    QVERIFY(typo && caption);
+    card.present(c, 5);
+    QVERIFY(!typo->isVisible());
+    input->setText("sakana");
+    check->click();
+    QVERIFY(typo->isVisible());
+    QCOMPARE(typo->text(), QString("I made a typo"));
+    QCOMPARE(typo->accessibleName(), QString("Count this answer as correct"));
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    typo->click();
+    QVERIFY(!typo->isVisible());
+    QCOMPARE(caption->text(), QString("Counted as correct"));
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.first().first().toBool());
+    QVERIFY(graded.last().first().toBool());
+    typo->click();
+    QCOMPARE(graded.count(), 2);
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["overridden"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("sakana"));
+    QTemporaryDir directory;
+    Store store(directory.path());
+    QVERIFY(store.record(logged, outcome == 1, 0));
+    QSqlQuery q(store.db);
+    QVERIFY(q.exec("SELECT correct, event_json FROM attempts"));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toInt(), 1);
+    const auto saved = QJsonDocument::fromJson(q.value(1).toByteArray()).object();
+    QCOMPARE(saved["outcome"].toString(), QString("correct"));
+    QCOMPARE(saved["grading"].toString(), QString("checked"));
+    QVERIFY(saved["overridden"].toBool());
+
+    card.present(c, 5);
+    input->setText("sakana");
+    check->click();
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("overridden"));
+    card.present(c, 5);
+    input->setText(c.subject.reading());
+    check->click();
+    QVERIFY(!typo->isVisible());
+    Challenge choice = c;
+    choice.mode = Mode::Choice;
+    choice.choices = {"にほん", "ほんじつ", "まいにち", "きゅうじつ"};
+    card.present(choice, 5);
+    for (auto *b : card.findChildren<QPushButton *>())
+      if (b->property("answer").toString() == "ほんじつ")
+        b->click();
+    QVERIFY(card.findChild<QLabel *>("submittedAnswer")->isVisible());
+    QVERIFY(!typo->isVisible());
+    card.close();
+  }
+  void memoryHelpOnlyAfterMiss() {
+    Card card;
+    Challenge c;
+    c.subject.kind = "kanji";
+    c.subject.characters = "大";
+    c.subject.meanings = {"Big"};
+    c.subject.readings = {"たい"};
+    c.subject.readingKind = "onyomi";
+    c.subject.similarKanji = {{"犬", "Dog", "けん"}, {"太", "Fat", "た"}};
+    c.subject.readingMnemonic = "Say <reading>たい</reading>. <script>x</script>";
+    c.subject.meaningMnemonic = "A <radical>person</radical> stretches.";
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    auto *help = card.findChild<QFrame *>("memoryHelp");
+    auto *similar = card.findChild<QLabel *>("similarKanji");
+    auto *mnemonic = card.findChild<QLabel *>("mnemonic");
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    QVERIFY(help && similar && mnemonic);
+    auto helpText = [help] {
+      QStringList texts;
+      for (auto *part : help->findChildren<QLabel *>())
+        if (part->isVisible())
+          texts << part->text();
+      return texts.join('\n');
+    };
+    auto missTyped = [&] {
+      card.present(c, 5);
+      input->setText("sakana");
+      check->click();
+    };
+    missTyped();
+    QVERIFY(!help->isVisible());
+    card.setMissDetails(true);
+    missTyped();
+    QVERIFY(help->isVisible());
+    QVERIFY(helpText().contains("Looks similar"));
+    QVERIFY(similar->text().contains("犬"));
+    QVERIFY(similar->text().contains("Dog · けん"));
+    QVERIFY(similar->text().contains("太"));
+    QVERIFY(helpText().contains("Reading mnemonic"));
+    QCOMPARE(mnemonic->textFormat(), Qt::RichText);
+    QVERIFY(mnemonic->text().contains("<b>たい</b>"));
+    QVERIFY(mnemonic->text().contains("&lt;script&gt;"));
+    QVERIFY(!mnemonic->text().contains("<script>"));
+    card.findChild<QPushButton *>("countAsCorrect")->click();
+    QVERIFY(!help->isVisible());
+    finish->click();
+
+    card.present(c, 5);
+    input->setText("tai");
+    check->click();
+    QVERIFY(!help->isVisible());
+    finish->click();
+
+    Challenge choice = c;
+    choice.mode = Mode::Choice;
+    choice.reading = false;
+    choice.choices = {"Big", "Dog", "Fat", "Small"};
+    card.present(choice, 5);
+    for (auto *b : card.findChildren<QPushButton *>())
+      if (b->property("answer").toString() == "Dog")
+        b->click();
+    QVERIFY(help->isVisible());
+    QVERIFY(helpText().contains("Meaning mnemonic"));
+    QVERIFY(mnemonic->text().contains("<b>person</b>"));
+    QVERIFY(!mnemonic->text().contains("たい"));
+    finish->click();
+
+    Challenge recall = c;
+    recall.mode = Mode::Recall;
+    card.present(recall, 5);
+    input->setText("tai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markRemembered")->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(!help->isVisible());
+    outcome = -9;
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, -9);
+    QVERIFY(card.isVisible());
+    QVERIFY(help->isVisible());
+    QVERIFY(finish->isVisible());
+    QVERIFY(!card.findChild<QPushButton *>("markMissed")->isVisible());
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(logged.event.contains("graded_at"));
+
+    recall.subject.source = "anki";
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!help->isVisible());
+    outcome = -9;
+    recall.subject.source = "wanikani";
+    recall.subject.similarKanji.clear();
+    recall.subject.readingMnemonic.clear();
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, 0);
+  }
+  void practiceTogglesReachCards() {
+    QTemporaryDir directory;
+    Store store(directory.path());
+    App app(store, directory.path());
+    app.showSettings();
+    QTabWidget *tabs = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *found = window->findChild<QTabWidget *>("dashboardTabs"))
+        tabs = found;
+    QVERIFY(tabs);
+    tabs->window()->findChild<QComboBox *>("previewChallengeMode")->setCurrentIndex(1);
+    Card *preview = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *card = qobject_cast<Card *>(window);
+          card && card->isVisible() && card->windowTitle().contains("Settings preview"))
+        preview = card;
+    QVERIFY(preview);
+    Challenge typed;
+    typed.subject.kind = "vocabulary";
+    typed.subject.characters = "電車";
+    typed.subject.meanings = {"Train"};
+    typed.subject.readings = {"でんしゃ"};
+    typed.mode = Mode::Typing;
+    typed.reading = true;
+    QSignalSpy graded(preview, &Card::graded);
+    auto *input = preview->findChild<QLineEdit *>("readingInput");
+    auto *check = preview->findChild<QPushButton *>("checkReading");
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    tabs->findChild<QCheckBox *>("nearMissRetry")->setChecked(false);
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    Challenge recall = typed;
+    recall.mode = Mode::Recall;
+    preview->present(recall, 5);
+    QVERIFY(input->isVisible());
+    tabs->findChild<QCheckBox *>("typeBeforeReveal")->setChecked(false);
+    preview->present(recall, 5);
+    QVERIFY(!input->isVisible());
+    typed.subject.meaningMnemonic = typed.subject.readingMnemonic = "Mnemonic";
+    auto *help = preview->findChild<QFrame *>("memoryHelp");
+    preview->present(typed, 5);
+    input->setText("sakana");
+    check->click();
+    QVERIFY(!help->isVisible());
+    tabs->findChild<QCheckBox *>("missDetails")->setChecked(true);
+    preview->present(typed, 5);
+    input->setText("sakana");
+    check->click();
+    QVERIFY(help->isVisible());
+    preview->close();
+  }
   void dashboardNavigationAndFeedbackSettings() {
     QTemporaryDir directory;
     Store store(directory.path());
@@ -1599,6 +2014,15 @@ private slots:
     QVERIFY(readingRetries);
     QVERIFY(readingRetries->isChecked());
     readingRetries->setChecked(false);
+    auto *nearMiss = tabs->findChild<QCheckBox *>("nearMissRetry");
+    QVERIFY(nearMiss && nearMiss->isChecked());
+    nearMiss->setChecked(false);
+    auto *typeFirst = tabs->findChild<QCheckBox *>("typeBeforeReveal");
+    QVERIFY(typeFirst && typeFirst->isChecked());
+    typeFirst->setChecked(false);
+    auto *missDetails = tabs->findChild<QCheckBox *>("missDetails");
+    QVERIFY(missDetails && !missDetails->isChecked());
+    missDetails->setChecked(true);
     sound->setChecked(false);
     QVERIFY(!volume->isEnabled());
     motion->setChecked(true);
@@ -1612,6 +2036,9 @@ private slots:
     QVERIFY(!saved.value("sound_enabled").toBool());
     QVERIFY(saved.value("reduced_motion").toBool());
     QVERIFY(!saved.value("reading_retry_enabled").toBool());
+    QCOMPARE(saved.value("practice/near_miss_retry"), QVariant(false));
+    QCOMPARE(saved.value("practice/type_before_reveal"), QVariant(false));
+    QCOMPARE(saved.value("practice/miss_details"), QVariant(true));
     QVERIFY(!store.insightsHtml({}).contains("Little milestones"));
     QVERIFY(!store.insightsHtml({}).contains("Newest first"));
     tabs->setCurrentIndex(3);
@@ -1664,6 +2091,7 @@ private slots:
     c.reading = true;
     QSignalSpy graded(&card, &Card::graded), completed(&card, &Card::completed);
     card.present(c, 5);
+    card.findChild<QLineEdit *>("readingInput")->setText("nihon");
     card.findChild<QPushButton *>("revealAnswer")->click();
     card.findChild<QPushButton *>("markRemembered")->click();
     QVERIFY(card.isVisible());
@@ -1856,7 +2284,9 @@ private slots:
       QCOMPARE(card->challenge.event["session_total"].toInt(), 2);
       const auto challenge = card->challenge;
       if (challenge.mode == Mode::Recall) {
+        card->findChild<QLineEdit *>("readingInput")->setText("x");
         card->findChild<QPushButton *>("revealAnswer")->click();
+        QVERIFY(card->findChild<QPushButton *>("markRemembered")->isVisible());
         card->findChild<QPushButton *>("markRemembered")->click();
       } else {
         if (challenge.mode == Mode::Typing) {
@@ -2363,6 +2793,7 @@ private slots:
   }
   void cardPlacementIsExplicitAndCompact() {
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setStyleSheet(appStyle());
     Challenge c;
     c.subject = demoSubjects().first();
@@ -2566,6 +2997,7 @@ private slots:
   }
   void revealAndDismiss() {
     Card card;
+    card.setTypeBeforeReveal(false);
     Challenge c;
     c.subject = demoSubjects().first();
     c.mode = Mode::Recall;

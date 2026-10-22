@@ -107,12 +107,21 @@ saved display falls back to the primary display without forgetting your choice.
 
 There are three challenge formats:
 
-- **Recall:** try the prompted reading or meaning, reveal, then honestly select
-  **Remembered** or **Missed**. The rating applies to the prompted skill only.
+- **Recall:** type your answer, reveal, then honestly select **Remembered** or
+  **Missed**. **Reveal answer** stays disabled until the field has text, and
+  **Enter** reveals. The card shows what you typed above the correct answer and
+  marks it **Matches** when it is an accepted answer. You still choose the
+  rating; it applies to the prompted skill only. Turn off **Type an answer
+  before revealing** to reveal without typing.
 - **Typed reading:** enter kana, katakana, or romaji and check the answer.
   A kana preview helps catch conversion mistakes. Use `n'` before a vowel when
   you intend ん, such as `shin'you`. Spell long vowels with kana spelling,
-  such as `gakkou`, rather than `gakkō`.
+  such as `gakkou`, rather than `gakkō`. If your answer is one kana away from
+  an accepted reading, such as しよう for しょう, the card says **Almost. Check
+  your spelling and try again.** and keeps your text for editing. You get one
+  such second try per card; turn off **Second try for near-miss spelling** for
+  strict grading. After a wrong typed reading, **I made a typo** counts the
+  answer as correct. Use it only for a slip, not for a reading you did not know.
 - **Four choices:** select a reading or meaning from plausible learned alternatives.
   When suitable readings or three distractors are unavailable, Moji Nook falls back to recall.
 
@@ -125,9 +134,22 @@ Distractors are heuristic and are not guaranteed to be ideal linguistic alternat
 Kanji prompts identify the requested primary reading type when available.
 A known alternate kanji reading can receive a retry prompt instead of an
 immediate miss; it is not accepted as the correct vocabulary reading. Turn off
-**Retry alternate kanji readings** for strict grading.
+**Retry alternate kanji readings** for strict grading. Each card gives at most
+one alternate-reading retry, and that hint takes precedence over the near-miss
+second try.
 Unrelated wrong answers are graded normally. Incorrect answers remain visible
 alongside the correct answer until you advance or dismiss the card.
+
+Turn on **Show memory help after a miss** to see a short study section under
+the answer after a missed WaniKani card. Kanji list **Looks similar** kanji with
+their meaning and reading. The section also shows the WaniKani mnemonic for the
+skill you were asked: the reading mnemonic for reading prompts, the meaning
+mnemonic for meaning prompts. A recall card rated **Missed** then stays open
+until you choose **Next** or **Done**. Anki cards have no memory help. This
+setting is off by default.
+
+The format options above are in Settings → Practice under **Fine-tune practice
+(optional)**.
 
 After activating the card, use **Tab** to move between controls, **Enter** to
 check a typed answer and then finish, and **Escape** to close. Shortcuts are
