@@ -179,8 +179,8 @@ private:
   QSpinBox *interval;
   QSpinBox *sessionCount;
   QSpinBox *snoozeLength;
-  QSlider *newestPercent, *recentPercent, *persistentPercent, *recallPercent,
-      *typedPercent;
+  QSlider *newestPercent, *recentPercent, *persistentPercent, *burnedPercent,
+      *recallPercent, *typedPercent;
   QComboBox *corner, *monitor, *theme, *practiceSource;
   QPushButton *syncButton;
   QTimer heartbeat, autoSync;

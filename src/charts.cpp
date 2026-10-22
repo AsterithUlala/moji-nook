@@ -56,6 +56,7 @@ ChartData loadChartData(const Store &store, QDate today) {
             : reason == "Persistent trouble" ? 1
             : reason == "Broad recall"       ? 2
             : reason == "Newest 30"          ? 4
+            : reason == "Burned review"      ? 5
                                              : 3;
     data.mix[i] += q.value(1).toInt();
   }
@@ -163,6 +164,9 @@ void InsightsBrowser::render() {
       if (series == 2)
         p.drawLine(QPointF(rect.left(), rect.center().y()),
                    QPointF(rect.right(), rect.center().y()));
+      if (series == 5)
+        for (double x = rect.left() + 2; x < rect.right(); x += 6)
+          p.drawPoint(QPointF(x, rect.center().y()));
     }
     p.restore();
   };
@@ -359,10 +363,11 @@ void InsightsBrowser::render() {
                             .arg(day.meaningTotal);
   panel = "<h2>Your practice mix</h2><p>Actual answered cards</p>";
   const QStringList names = {"Recent struggles", "Persistent trouble",
-                             "Broad recall", "Legacy / unknown", "Newest 30"};
+                             "Broad recall",     "Legacy / unknown",
+                             "Newest 30",        "Burned review"};
   // The selection categories share pigment; labels and print patterns distinguish them.
-  const QList<QColor> colors = {green, green, green, green, green};
-  chart("selection-balance", 290, [&](QPainter &p) {
+  const QList<QColor> colors = {green, green, green, green, green, green};
+  chart("selection-balance", 344, [&](QPainter &p) {
     for (int i = 0; i < names.size(); ++i) {
       int y = 12 + i * 54;
       label(p, QRectF(16, y, width - 32, 22), names[i]);

@@ -163,9 +163,11 @@ std::optional<Subject> kaishiSubject(const QJsonObject &c,
             : interval < 60        ? 7
             : interval < 180       ? 8
                                    : 9;
+  if (c["type"].toInt() == 2 && interval > 0)
+    s.intervalHours = interval * 24;
   int again = 0, rated = 0;
   double recent = 0;
-  qint64 first = 0;
+  qint64 first = 0, last = 0;
   const auto now = QDateTime::currentDateTimeUtc();
   for (const auto &value : reviews) {
     const auto r = value.toObject();
@@ -176,6 +178,7 @@ std::optional<Subject> kaishiSubject(const QJsonObject &c,
       continue;
     if (!first || id < first)
       first = id;
+    last = qMax(last, id);
     ++rated;
     if (ease == 1) {
       ++again;
@@ -186,8 +189,10 @@ std::optional<Subject> kaishiSubject(const QJsonObject &c,
         recent += std::exp(-days / 3);
     }
   }
-  if (first)
+  if (first) {
     s.startedAt = QDateTime::fromMSecsSinceEpoch(first, QTimeZone::UTC);
+    s.reviewedAt = QDateTime::fromMSecsSinceEpoch(last, QTimeZone::UTC);
+  }
   s.sourceData = {
       {"profile", profile},
       {"card_id", s.sourceId},

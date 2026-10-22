@@ -4,6 +4,8 @@
 #include <QScopeGuard>
 #include <QtTest>
 
+static const QDateTime noon(QDate(2026, 3, 1), QTime(12, 0));
+
 class CoreTest : public QObject {
   Q_OBJECT
   // 2026-10-19 is a Monday; day 0 = Monday … day 6 = Sunday.
@@ -271,7 +273,7 @@ private slots:
     Picker picker(78);
     int recent = 0, persistent = 0, broad = 0;
     for (int i = 0; i < 6000; ++i) {
-      auto c = picker.next(pool, {}, {}, evidence);
+      auto c = picker.next(pool, {}, evidence, {}, {0, 40, 20, 0}, noon);
       if (c.selectionReason == "Recent struggles") {
         ++recent;
         QCOMPARE(c.subject.id, 1);
@@ -289,7 +291,7 @@ private slots:
     QVERIFY(persistent > 750 && persistent < 1050);
     QVERIFY(broad > 2500);
     for (int i = 0; i < 100; ++i) {
-      auto c = picker.next(pool, {}, {1}, evidence, 100, 0);
+      auto c = picker.next(pool, {1}, evidence, {}, {0, 100, 0, 0}, noon);
       QCOMPARE(c.selectionReason, QString("Broad recall"));
       QVERIFY(c.subject.id != 1);
     }
@@ -299,6 +301,7 @@ private slots:
     {
       Store old(dir.path());
       QSqlQuery q(old.db);
+      QVERIFY(q.exec("DROP INDEX attempts_graded"));
       QVERIFY(q.exec("ALTER TABLE attempts DROP COLUMN event_json"));
       QVERIFY(q.exec("INSERT INTO attempts(subject_id,created_at,local_day) "
                      "VALUES(99,'2025-01-01T00:00:00Z','2025-01-01')"));
@@ -340,6 +343,243 @@ private slots:
     const auto csv = f.readAll();
     QVERIFY(csv.contains("event_json"));
     QVERIFY(csv.contains("\n\"-7\",\"'=SUM(A1)\""));
+  }
+  void reviewedAtFromAssignments() {
+    QJsonArray subjects, assignments;
+    const QList<QJsonObject> data = {
+        {{"srs_stage", 5}, {"available_at", "2026-03-08T11:00:00.000000Z"}},
+        {{"srs_stage", 9},
+         {"burned_at", "2025-06-01T09:30:00.000000Z"},
+         {"available_at", QJsonValue()}},
+        {{"srs_stage", 2}, {"available_at", QJsonValue()}},
+        {{"srs_stage", 9}}};
+    for (int i = 0; i < data.size(); ++i) {
+      QJsonObject word{{"characters", "日"}, {"level", 1}};
+      word["meanings"] = QJsonArray{QJsonObject{
+          {"meaning", "Sun"}, {"accepted_answer", true}, {"primary", true}}};
+      subjects.append(
+          QJsonObject{{"id", i + 1}, {"object", "kanji"}, {"data", word}});
+      auto assignment = data[i];
+      assignment["subject_id"] = i + 1;
+      assignment["started_at"] = "2025-01-01T00:00:00.000000Z";
+      assignments.append(QJsonObject{{"data", assignment}});
+    }
+    const auto pool = parseSubjects(subjects, assignments, {});
+    QCOMPARE(pool.size(), 4);
+    auto at = [](const char *text) {
+      return QDateTime::fromString(text, Qt::ISODateWithMs);
+    };
+    QCOMPARE(srsIntervalHours(5), 167);
+    QCOMPARE(pool[0].reviewedAt, at("2026-03-01T12:00:00Z"));
+    QCOMPARE(pool[1].reviewedAt, at("2025-06-01T09:30:00Z"));
+    QCOMPARE(pool[2].reviewedAt, at("2025-01-01T00:00:00Z"));
+    QCOMPARE(pool[3].reviewedAt, at("2025-01-01T00:00:00Z"));
+  }
+  void recallSeedsAndDecay() {
+    const auto now = QDateTime::fromString("2026-03-01T12:00:00Z", Qt::ISODate);
+    Subject guru;
+    guru.id = 1;
+    guru.stage = 5;
+    guru.meanings = {"One"};
+    guru.readings = {"いち"};
+    guru.reviewedAt = now;
+    Subject burned = guru;
+    burned.id = 2;
+    burned.stage = 9;
+    Subject anki = guru;
+    anki.id = -3;
+    anki.stage = 4;
+    anki.intervalHours = 167;
+    Subject unknown = guru;
+    unknown.id = 4;
+    unknown.readings.clear();
+    unknown.reviewedAt = {};
+    const auto memory =
+        estimateMemory({guru, burned, anki, unknown}, {}, now, now.date());
+    QCOMPARE(memory.size(), 7);
+    QVERIFY(!memory.contains(skillKey(4, true)));
+    const auto g = memory.value(skillKey(1, false));
+    QCOMPARE(g.lastSeen, now);
+    // WaniKani's next Guru review, a week later, lands at about 90% recall.
+    QVERIFY(qAbs(recallProbability(g, now.addSecs(167 * 3600)) - 0.9) < 1e-9);
+    QCOMPARE(memory.value(skillKey(1, true)).halfLifeDays, g.halfLifeDays);
+    QCOMPARE(memory.value(skillKey(2, false)).halfLifeDays, 5 * 365.0);
+    QCOMPARE(memory.value(skillKey(-3, false)).halfLifeDays, g.halfLifeDays);
+    QCOMPARE(recallProbability(memory.value(skillKey(4, false)), now), 0.5);
+    QCOMPARE(recallProbability(SkillMemory{}, now), 0.5);
+    const SkillMemory twoDays{2, now.addDays(-2)};
+    QCOMPARE(recallProbability(twoDays, now), 0.5);
+    QCOMPARE(recallProbability(twoDays, now.addDays(2)), 0.25);
+  }
+  void recallReplay() {
+    const auto reviewed =
+        QDateTime::fromString("2026-03-01T12:00:00Z", Qt::ISODate);
+    Subject s;
+    s.id = 1;
+    s.stage = 5;
+    s.meanings = {"One"};
+    s.reviewedAt = reviewed;
+    const double seed = estimateMemory({s}, {}, reviewed, reviewed.date())
+                            .value(skillKey(1, false))
+                            .halfLifeDays;
+    auto attempt = [&](double days, bool correct, bool strong) {
+      const auto at = reviewed.addMSecs(qint64(days * 86400000));
+      return GradedAttempt{1, false, correct, strong, at, at.date()};
+    };
+    auto replay = [&](const QVector<GradedAttempt> &attempts) {
+      const auto now = reviewed.addDays(400);
+      return estimateMemory({s}, attempts, now, now.date())
+          .value(skillKey(1, false));
+    };
+    // One half-life after the review, p = 0.5.
+    const auto strong = replay({attempt(seed, true, true)});
+    QVERIFY(qAbs(strong.halfLifeDays / seed - 2.0) < 1e-6);
+    QVERIFY(qAbs(replay({attempt(seed, true, false)}).halfLifeDays / seed -
+                 1.4) < 1e-6);
+    QCOMPARE(strong.lastSeen, attempt(seed, true, true).at);
+    QVERIFY(replay({attempt(1.0 / 1440, true, true)}).halfLifeDays / seed <
+            1.001);
+    QVERIFY(qAbs(replay({attempt(1, false, true)}).halfLifeDays / seed - 0.35) <
+            1e-9);
+    QVector<GradedAttempt> misses;
+    for (int day = 1; day <= 10; ++day)
+      misses.append(attempt(day, false, true));
+    QCOMPARE(replay(misses).halfLifeDays, 10.0 / 1440);
+    const auto early = replay({attempt(-1, false, true)});
+    QCOMPARE(early.halfLifeDays, seed);
+    QCOMPARE(early.lastSeen, reviewed);
+    const auto chronological =
+        replay({attempt(1, false, true), attempt(30, true, true)});
+    const auto shuffled =
+        replay({attempt(30, true, true), attempt(1, false, true)});
+    QCOMPARE(shuffled.halfLifeDays, chronological.halfLifeDays);
+    QCOMPARE(shuffled.lastSeen, attempt(30, true, true).at);
+    const auto later = attempt(500, false, true);
+    QCOMPARE(replay({later}).halfLifeDays, seed);
+  }
+  void recallRest() {
+    const auto now = QDateTime(QDate(2026, 3, 1), QTime(12, 0));
+    const QDate today = now.date();
+    const SkillMemory fragile{1, now.addDays(-1)};
+    QVERIFY(!rested(fragile, now, today));
+    auto with = [&](auto change) {
+      SkillMemory m = fragile;
+      change(m);
+      return rested(m, now, today);
+    };
+    QVERIFY(with([&](SkillMemory &m) { m.lastCorrectDay = today; }));
+    QVERIFY(
+        !with([&](SkillMemory &m) { m.lastCorrectDay = today.addDays(-1); }));
+    QVERIFY(!with([](SkillMemory &m) { m.missesToday = 2; }));
+    QVERIFY(with([](SkillMemory &m) { m.missesToday = 3; }));
+    QVERIFY(with([&](SkillMemory &m) { m.lastMissAt = now.addSecs(-9 * 60); }));
+    QVERIFY(
+        !with([&](SkillMemory &m) { m.lastMissAt = now.addSecs(-11 * 60); }));
+    QVERIFY(rested(SkillMemory{100, now.addDays(-1)}, now, today));
+    QVERIFY(!rested(SkillMemory{100, now.addDays(-10)}, now, today));
+
+    Subject s;
+    s.id = 1;
+    s.stage = 1;
+    s.meanings = {"One"};
+    s.reviewedAt = now.addDays(-10);
+    auto at = [&](int hours) {
+      const auto t = now.addSecs(hours * 3600);
+      return GradedAttempt{1, false, false, true, t, t.date()};
+    };
+    auto missYesterday = at(-24), missMorning = at(-3), correctNoon = at(-1);
+    correctNoon.correct = true;
+    auto m = estimateMemory({s}, {missYesterday, missMorning}, now, today)
+                 .value(skillKey(1, false));
+    QCOMPARE(m.missesToday, 1);
+    QCOMPARE(m.lastMissAt, missMorning.at);
+    QVERIFY(!rested(m, now, today));
+    m = estimateMemory({s}, {missYesterday, missMorning, correctNoon}, now,
+                       today)
+            .value(skillKey(1, false));
+    QCOMPARE(m.lastCorrectDay, today);
+    QVERIFY(rested(m, now, today));
+    const auto tomorrow = now.addDays(1);
+    QVERIFY(
+        !rested(estimateMemory({s}, {missYesterday, missMorning, correctNoon},
+                               tomorrow, tomorrow.date())
+                    .value(skillKey(1, false)),
+                tomorrow, tomorrow.date()));
+  }
+  void gradedAttemptStrength() {
+    QTemporaryDir dir;
+    Store store(dir.path());
+    QVERIFY(store.ready());
+    struct Row {
+      QString mode;
+      QVariant correct, event;
+      bool strong;
+    };
+    auto json = [](const QJsonObject &o) {
+      return QVariant(QString::fromUtf8(QJsonDocument(o).toJson()));
+    };
+    const QVector<Row> rows = {
+        {"Typed reading", 1, json({{"grading", "checked"}}), true},
+        {"Typed reading", 1,
+         json({{"grading", "checked"}, {"overridden", true}}), false},
+        {"Four choices", 0,
+         json({{"grading", "checked"}, {"overridden", false}}), true},
+        {"Recall", 1, json({{"grading", "self-rated"}}), false},
+        {"Recall", 1,
+         json({{"grading", "self-rated"}, {"recall_attempt_matched", true}}),
+         true},
+        {"Recall", 0,
+         json({{"grading", "self-rated"}, {"recall_attempt_matched", false}}),
+         false},
+        {"Recall", 1, json({{"mode", "Recall"}}), false},
+        {"Four choices", 0, json({{"mode", "Four choices"}}), true},
+        {"Typed reading", 1, QVariant(QMetaType::fromType<QString>()), true},
+        {"Recall", 1, QString("{broken"), false},
+        {"Recall", QVariant(QMetaType::fromType<int>()),
+         json({{"grading", "self-rated"}}), false},
+    };
+    const auto now = QDateTime::currentDateTimeUtc();
+    QSqlQuery q(store.db);
+    q.prepare("INSERT INTO attempts(subject_id,mode,dimension,correct,"
+              "created_at,local_day,event_json) VALUES(?,?,?,?,?,?,?)");
+    auto insert = [&](int id, const Row &row, const QDateTime &at) {
+      q.addBindValue(id);
+      q.addBindValue(row.mode);
+      q.addBindValue(id % 2 ? "Reading" : "Meaning");
+      q.addBindValue(row.correct);
+      q.addBindValue(at.toString(Qt::ISODateWithMs));
+      q.addBindValue(at.toLocalTime().date().toString(Qt::ISODate));
+      q.addBindValue(row.event);
+      return q.exec();
+    };
+    // Inserted newest first; results come back oldest first.
+    for (int i = 0; i < rows.size(); ++i)
+      QVERIFY(insert(i + 1, rows[i], now.addSecs(-i * 60)));
+    QVERIFY(insert(99, rows[0], now.addDays(-31)));
+    const auto graded = store.gradedAttempts();
+    QCOMPARE(graded.size(), rows.size() - 1);
+    for (const auto &a : graded) {
+      const int i = a.subjectId - 1;
+      QCOMPARE(a.strong, rows[i].strong);
+      QCOMPARE(a.correct, rows[i].correct.toInt() == 1);
+      QCOMPARE(a.reading, a.subjectId % 2 == 1);
+      QCOMPARE(a.at.toString(Qt::ISODateWithMs),
+               now.addSecs(-i * 60).toString(Qt::ISODateWithMs));
+      QCOMPARE(a.localDay, now.addSecs(-i * 60).toLocalTime().date());
+    }
+    QCOMPARE(graded.first().subjectId, rows.size() - 1);
+    Challenge c;
+    c.subject.id = 50;
+    c.mode = Mode::Typing;
+    c.reading = true;
+    c.event["overridden"] = true;
+    QVERIFY(store.record(c, true, 100));
+    c.event.remove("overridden");
+    QVERIFY(store.record(c, true, 100));
+    const auto recorded = store.gradedAttempts();
+    QCOMPARE(recorded.size(), graded.size() + 2);
+    QVERIFY(!recorded[recorded.size() - 2].strong);
+    QVERIFY(recorded.last().strong);
   }
   void kana() {
     QCOMPARE(toKana("gakkou"), QString("がっこう"));
@@ -488,24 +728,27 @@ private slots:
     b.characters = "二";
     b.meanings = {"Two"};
     Picker picker(17);
+    const SelectionMix broad{0, 0, 0, 0};
     int recent = 0;
     for (int i = 0; i < 9000; ++i)
-      if (picker.next({a, b}, {}, {}).subject.id == 1)
+      if (picker.next({a, b}, {}, {}, {}, broad, noon).subject.id == 1)
         ++recent;
     QVERIFY(recent > 7700 && recent < 8300);
     for (int i = 0; i < 30; ++i)
-      QCOMPARE(picker.next({a, b}, {}, {1}).subject.id, 2);
-    QCOMPARE(picker.next({a}, {}, {1}).subject.id, 1);
+      QCOMPARE(picker.next({a, b}, {1}, {}, {}, broad, noon).subject.id, 2);
+    QCOMPARE(picker.next({a}, {1}, {}, {}, broad, noon).subject.id, 1);
     int burned = 0;
     for (int i = 0; i < 2000; ++i) {
-      auto c = picker.next({a, b}, {}, {}, {}, 0, 0, 100, 0, {.1, 3, 2, 1, 10});
+      auto c = picker.next({a, b}, {}, {}, {},
+                           {0, 0, 0, 0, 100, 0, {.1, 3, 2, 1, 10}}, noon);
       QCOMPARE(c.mode, Mode::Recall);
       burned += c.subject.id == 2;
     }
     QVERIFY(burned > 1950);
     a.readings = {"いち"};
     for (int i = 0; i < 30; ++i)
-      QCOMPARE(picker.next({a}, {}, {}, {}, 0, 0, 0, 100).mode, Mode::Typing);
+      QCOMPARE(picker.next({a}, {}, {}, {}, {0, 0, 0, 0, 0, 100}, noon).mode,
+               Mode::Typing);
   }
   void newestLearnedSelection() {
     QVector<Subject> pool;
@@ -525,7 +768,7 @@ private slots:
     Picker picker(79);
     QSet<int> selected;
     for (int i = 0; i < 1000; ++i) {
-      auto c = picker.next(pool, {}, {40}, {}, 0, 0, 0, 100, {}, 100);
+      auto c = picker.next(pool, {40}, {}, {}, {100, 0, 0, 0, 0, 100}, noon);
       QCOMPARE(c.selectionReason, QString("Newest 30"));
       QCOMPARE(c.mode, Mode::Typing);
       QVERIFY(c.subject.id >= 11 && c.subject.id < 40);
@@ -534,20 +777,20 @@ private slots:
     QCOMPARE(selected.size(), 29);
     QHash<QString, int> counts;
     for (int i = 0; i < 10000; ++i)
-      ++counts[picker.next(pool, {}, {}, evidence, 25, 20, 50, 25, {}, 30)
+      ++counts[picker.next(pool, {}, evidence, {}, {30, 25, 20, 0}, noon)
                    .selectionReason];
     QVERIFY(qAbs(counts["Newest 30"] - 3000) < 200);
     QVERIFY(qAbs(counts["Recent struggles"] - 2500) < 200);
     QVERIFY(qAbs(counts["Persistent trouble"] - 2000) < 200);
     QVERIFY(qAbs(counts["Broad recall"] - 2500) < 200);
     auto s = pool.first();
-    QCOMPARE(
-        picker.next({s}, {}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
-        QString("Newest 30"));
+    QCOMPARE(picker.next({s}, {}, {}, {}, {100, 0, 0, 0, 100, 0}, noon)
+                 .selectionReason,
+             QString("Newest 30"));
     s.startedAt = {};
-    QCOMPARE(
-        picker.next({s}, {}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
-        QString("Broad recall"));
+    QCOMPARE(picker.next({s}, {}, {}, {}, {100, 0, 0, 0, 100, 0}, noon)
+                 .selectionReason,
+             QString("Broad recall"));
   }
   void choiceAmbiguityAndModeMix() {
     QVector<Subject> pool;
@@ -570,7 +813,7 @@ private slots:
     Picker picker(44);
     int modes[3] = {};
     for (int i = 0; i < 4000; ++i) {
-      auto c = picker.next(pool, {}, {});
+      auto c = picker.next(pool, {}, {}, {}, {0, 0, 0, 0}, noon);
       ++modes[int(c.mode)];
       if (c.mode == Mode::Choice) {
         QCOMPARE(c.choices.size(), 4);
@@ -584,6 +827,170 @@ private slots:
     QVERIFY(modes[0] > 1800 && modes[0] < 2200);
     QVERIFY(modes[1] > 850 && modes[1] < 1150);
     QVERIFY(modes[2] > 850 && modes[2] < 1150);
+  }
+  void pickerRestsSkills() {
+    QVector<Subject> pool;
+    for (int i = 1; i <= 10; ++i) {
+      Subject s;
+      s.id = i;
+      s.stage = 1;
+      s.kind = "kanji";
+      s.meanings = {QString("Meaning %1").arg(i)};
+      s.readings = {QString("よみ%1").arg(i)};
+      pool.append(s);
+    }
+    const QDate today = noon.date();
+    const SkillMemory fragile{1, noon.addDays(-1)};
+    Memory memory;
+    auto rest = [&](int id, bool reading, auto change) {
+      SkillMemory m = fragile;
+      change(m);
+      memory[skillKey(id, reading)] = m;
+    };
+    for (bool reading : {false, true}) {
+      for (int id : {1, 2, 3})
+        rest(id, reading, [&](SkillMemory &m) { m.lastCorrectDay = today; });
+      rest(4, reading, [](SkillMemory &m) { m.missesToday = 3; });
+      rest(5, reading,
+           [](SkillMemory &m) { m.lastMissAt = noon.addSecs(-5 * 60); });
+    }
+    rest(6, false, [](SkillMemory &m) { m = {100, noon.addSecs(-60)}; });
+    for (int id = 6; id <= 10; ++id)
+      if (!memory.contains(skillKey(id, false)))
+        memory[skillKey(id, false)] = fragile;
+    for (int id = 6; id <= 10; ++id)
+      memory[skillKey(id, true)] = fragile;
+    for (const auto &[key, m] : memory.asKeyValueRange())
+      QCOMPARE(rested(m, noon, today), key.section(':', 0, 0).toInt() <= 5 ||
+                                           key == skillKey(6, false));
+    Evidence evidence;
+    evidence[skillKey(1, true)] = {5, 5};
+    evidence[skillKey(7, true)] = {5, 0};
+    Picker picker(81);
+    QSet<QString> seen;
+    for (int i = 0; i < 3000; ++i) {
+      const SelectionMix mix{0, i % 3 == 0 ? 100 : 0, i % 3 == 1 ? 100 : 0, 0};
+      const auto c = picker.next(pool, {}, evidence, memory, mix, noon);
+      const auto key = skillKey(c.subject.id, c.reading);
+      QVERIFY2(!rested(memory.value(key), noon, today), qPrintable(key));
+      seen.insert(key);
+      if (i % 3 == 0) {
+        QCOMPARE(key, skillKey(7, true));
+        QCOMPARE(c.selectionReason, QString("Recent struggles"));
+      }
+      if (i % 3 == 1)
+        QCOMPARE(c.selectionReason, QString("Broad recall"));
+    }
+    QCOMPARE(seen.size(), 9);
+  }
+  void pickerFallsBackWhenEverythingRests() {
+    QVector<Subject> pool;
+    for (int i = 1; i <= 3; ++i) {
+      Subject s;
+      s.id = i;
+      s.stage = 1;
+      s.meanings = {QString::number(i)};
+      pool.append(s);
+    }
+    Memory memory;
+    memory[skillKey(1, false)] = {1, noon.addDays(-1), noon.date()};
+    memory[skillKey(2, false)] = {100, noon.addDays(-6)};
+    memory[skillKey(3, false)] = {1, noon.addDays(-1), noon.date()};
+    for (const auto &m : memory)
+      QVERIFY(rested(m, noon, noon.date()));
+    Picker picker(82);
+    int needy = 0;
+    for (int i = 0; i < 1000; ++i) {
+      const auto c =
+          picker.next(pool, {1}, {}, memory, {0, 0, 0, 0, 100, 0}, noon);
+      QVERIFY(c.subject.id != 1);
+      QCOMPARE(c.selectionReason, QString("Broad recall"));
+      needy += c.subject.id == 3;
+    }
+    // p = 0.5 outweighs p = 0.96 when only need decides.
+    QVERIFY(needy > 850);
+    const auto typed =
+        picker.next(pool, {}, {}, memory, {0, 0, 0, 0, 0, 100}, noon);
+    QCOMPARE(typed.mode, Mode::Recall);
+    const Memory justSeen{{skillKey(2, false), {100, noon}}};
+    QCOMPARE(picker.next({pool[1]}, {}, {}, justSeen, {0, 0, 0, 0, 0, 0}, noon)
+                 .subject.id,
+             2);
+  }
+  void burnedBucket() {
+    QVector<Subject> pool;
+    for (int i = 1; i <= 10; ++i) {
+      Subject s;
+      s.id = i;
+      s.stage = i <= 3 ? 9 : 1;
+      s.meanings = {QString::number(i)};
+      pool.append(s);
+    }
+    Picker picker(83);
+    int burnedReviews = 0;
+    for (int i = 0; i < 4000; ++i) {
+      const auto c = picker.next(pool, {}, {}, {}, {0, 0, 0, 100}, noon);
+      QCOMPARE(c.subject.stage, 9);
+      QCOMPARE(c.selectionReason, QString("Burned review"));
+      const auto mixed = picker.next(pool, {}, {}, {}, {0, 0, 0, 10}, noon);
+      burnedReviews += mixed.selectionReason == "Burned review";
+    }
+    QVERIFY(qAbs(burnedReviews - 400) < 80);
+    auto unburned = pool.mid(3);
+    auto anki = pool.mid(0, 3);
+    for (auto &s : anki)
+      s.source = "anki";
+    for (int i = 0; i < 100; ++i) {
+      QCOMPARE(picker.next(unburned, {}, {}, {}, {0, 0, 0, 100}, noon)
+                   .selectionReason,
+               QString("Broad recall"));
+      QCOMPARE(
+          picker.next(anki, {}, {}, {}, {0, 0, 0, 100}, noon).selectionReason,
+          QString("Broad recall"));
+    }
+  }
+  void formatsFollowRecall() {
+    QVector<Subject> pool;
+    const QStringList readings = {"かん", "さん", "たん", "なん",
+                                  "はん", "ばん", "ぱん", "まん"};
+    Memory memory;
+    for (int i = 0; i < readings.size(); ++i) {
+      Subject s;
+      s.id = i + 1;
+      s.stage = 1;
+      s.kind = "kanji";
+      s.characters = QString::number(i);
+      s.meanings = {QString("Meaning %1").arg(i)};
+      s.readings = {readings[i]};
+      s.components = {1};
+      pool.append(s);
+      const double p = i < 4 ? 0.3 : 0.8;
+      for (bool reading : {false, true})
+        memory[skillKey(s.id, reading)] = {
+            1, noon.addMSecs(qint64(std::log2(p) * 86400000))};
+    }
+    QVERIFY(qAbs(recallProbability(memory.value(skillKey(1, false)), noon) -
+                 0.3) < 1e-6);
+    Picker picker(84);
+    auto sturdyShare = [&](int recall, int typed, Mode mode) {
+      int sturdy = 0;
+      for (int i = 0; i < 6000; ++i) {
+        const auto c = picker.next(pool, {}, {}, memory,
+                                   {0, 0, 0, 0, recall, typed}, noon);
+        if (c.mode != mode)
+          return -1.;
+        sturdy += c.subject.id > 4;
+      }
+      return sturdy / 6000.;
+    };
+    // Expected: choice 0.04/0.53, recall 0.2/0.9, typed 0.16/0.37.
+    const double choice = sturdyShare(0, 0, Mode::Choice);
+    const double recall = sturdyShare(100, 0, Mode::Recall);
+    const double typed = sturdyShare(0, 100, Mode::Typing);
+    QVERIFY2(choice >= 0 && choice < 0.11, qPrintable(QString::number(choice)));
+    QVERIFY2(recall > 0.18 && recall < 0.27,
+             qPrintable(QString::number(recall)));
+    QVERIFY2(typed > 0.38, qPrintable(QString::number(typed)));
   }
   void answersAndPersistence() {
     QTemporaryDir dir;
@@ -603,11 +1010,8 @@ private slots:
       Store store(dir.path());
       QVERIFY(store.ready());
       QVERIFY(store.record(c, std::nullopt, 0));
-      QVERIFY(store.missBoosts().isEmpty());
       QVERIFY(store.record(c, false, 100));
-      QVERIFY(store.missBoosts().value(1) > 1.9);
       QVERIFY(store.record(c, true, 100));
-      QVERIFY(store.missBoosts().isEmpty());
       QVERIFY(store.exportCsv(dir.path() + "/export.csv"));
       auto html = store.statsHtml({c.subject});
       QVERIFY(html.contains("Last 24 hours"));

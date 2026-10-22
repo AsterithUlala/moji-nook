@@ -127,9 +127,28 @@ There are three challenge formats:
 
 The default requested mix is 50% recall, 25% typed reading, and 25% choices.
 Selection defaults to 30% Newest 30, 25% recent troubles, 20% persistent troubles,
-and 25% broad recall. Adjust these in **Fine-tune practice (optional)**.
+10% burned items, and 15% broad recall. Adjust these in
+**Fine-tune practice (optional)**. Saved percentages are kept; a new
+**Burned items** share uses whatever room your saved mix leaves, up to 10%.
 The realized mix can differ when eligible items or formats are unavailable.
 Distractors are heuristic and are not guaranteed to be ideal linguistic alternatives.
+
+Moji Nook estimates how well you remember each reading and meaning. It starts
+from your last WaniKani review or Anki interval and updates the estimate
+with your answers here:
+
+- A reading or meaning you answer correctly rests until tomorrow.
+- A missed one comes back after at least 10 minutes. After three misses in a
+  day, it rests until tomorrow.
+- Words you almost certainly still know also wait their turn.
+- Burned WaniKani items have their own share, because WaniKani no longer
+  reviews them. Anki cards never count as burned.
+- Fragile words lean toward four choices. Sturdier words lean toward typed
+  reading.
+
+If every word in your pool is resting, Moji Nook still shows a card and picks
+the word you are most likely to have forgotten. The estimate uses your last 30
+days of answers here.
 
 Kanji prompts identify the requested primary reading type when available.
 A known alternate kanji reading can receive a retry prompt instead of an
