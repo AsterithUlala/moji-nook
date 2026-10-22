@@ -234,29 +234,29 @@ protected:
     painter.drawPath(chevron);
   }
 };
-class ScrollSafeSpinBox : public QSpinBox {
+template <class Stepper> class ScrollSafeStepper : public Stepper {
 public:
-  explicit ScrollSafeSpinBox(QWidget *parent = nullptr) : QSpinBox(parent) {
+  explicit ScrollSafeStepper(QWidget *parent = nullptr) : Stepper(parent) {
     // Style sheet padding does not reach the inner editor; inset the text
     // to line up with the neighboring combo boxes.
-    lineEdit()->setTextMargins(7, 0, 0, 0);
+    this->lineEdit()->setTextMargins(7, 0, 0, 0);
   }
 
 protected:
   void wheelEvent(QWheelEvent *event) override { event->ignore(); }
   void paintEvent(QPaintEvent *event) override {
-    QSpinBox::paintEvent(event);
+    Stepper::paintEvent(event);
     QStyleOptionSpinBox option;
-    initStyleOption(&option);
-    const QRect up = style()->subControlRect(
+    this->initStyleOption(&option);
+    const QRect up = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, this);
-    const QRect down = style()->subControlRect(
+    const QRect down = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxDown, this);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QColor color = isEnabled()
-        ? palette().color(QPalette::Text)
-        : palette().color(QPalette::Disabled, QPalette::Text);
+    const QColor color = this->isEnabled()
+        ? this->palette().color(QPalette::Text)
+        : this->palette().color(QPalette::Disabled, QPalette::Text);
     painter.setPen(QPen(color, 1.5, Qt::SolidLine, Qt::RoundCap,
                          Qt::RoundJoin));
     auto chevron = [&painter](const QRect &button, bool upward) {
@@ -274,6 +274,8 @@ protected:
     chevron(down, false);
   }
 };
+using ScrollSafeSpinBox = ScrollSafeStepper<QSpinBox>;
+using ScrollSafeTimeEdit = ScrollSafeStepper<QTimeEdit>;
 
 QVector<Subject> demoSubjects();
 QString appStyle(int theme = defaultTheme);

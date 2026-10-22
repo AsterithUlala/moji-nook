@@ -485,7 +485,7 @@ QString quietHoursText(const QuietSchedule &schedule, const QDateTime &now) {
   const QLocale locale;
   QString until = locale.toString(end->time(), QLocale::ShortFormat);
   if (now.secsTo(*end) >= 86400)
-    until = locale.dayName(end->date().dayOfWeek()) + " " + until;
+    until = QLocale(QLocale::English).dayName(end->date().dayOfWeek()) + " " + until;
   return "Quiet hours until " + until;
 }
 bool automaticSyncDue(const QDateTime &lastSuccess,

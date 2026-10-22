@@ -43,6 +43,35 @@ class UiTest : public QObject {
     schedule.windows = {window};
     return schedule.serialize().first();
   }
+  static void answer(Card *card) {
+    const auto challenge = card->challenge;
+    if (challenge.mode == Mode::Recall) {
+      card->findChild<QPushButton *>("revealAnswer")->click();
+      card->findChild<QPushButton *>("markRemembered")->click();
+      return;
+    }
+    if (challenge.mode == Mode::Typing) {
+      card->findChild<QLineEdit *>("readingInput")->setText(challenge.subject.reading());
+      card->findChild<QPushButton *>("checkReading")->click();
+    } else {
+      for (auto *button : card->findChildren<QPushButton *>())
+        if (button->property("answer").isValid() &&
+            challenge.accepts(button->property("answer").toString())) {
+          button->click();
+          break;
+        }
+    }
+    card->findChild<QPushButton *>("finishCard")->click();
+  }
+  // Point the row at a window around now, attached to the day it starts.
+  static void coverNow(QFrame *row) {
+    const auto window = quietAround(60000, 3600000);
+    for (int i = 0; i < 7; ++i)
+      row->findChildren<QPushButton *>()[i]->setChecked(window.days >> i & 1);
+    auto edits = row->findChildren<QTimeEdit *>();
+    edits[0]->setTime(window.start);
+    edits[1]->setTime(window.end);
+  }
 private slots:
   void progressionRecapIsPassiveAndEmptyNoticesStayHidden() {
     ProgressRecap recap;
@@ -1865,7 +1894,9 @@ private slots:
     spin.setValue(5);
     ScrollSafeSlider slider;
     slider.setValue(30);
-    for (QWidget *widget : QList<QWidget *>{&combo, &spin, &slider}) {
+    ScrollSafeTimeEdit time;
+    time.setTime(QTime(9, 0));
+    for (QWidget *widget : QList<QWidget *>{&combo, &spin, &slider, &time}) {
       widget->show();
       widget->setFocus();
       QWheelEvent event(QPointF(5, 5), widget->mapToGlobal(QPoint(5, 5)),
@@ -1877,6 +1908,7 @@ private slots:
     QCOMPARE(combo.currentIndex(), 1);
     QCOMPARE(spin.value(), 5);
     QCOMPARE(slider.value(), 30);
+    QCOMPARE(time.time(), QTime(9, 0));
     QTest::keyClick(&slider, Qt::Key_Right);
     QCOMPARE(slider.value(), 31);
     QTest::keyClick(&combo, Qt::Key_Down);
@@ -1953,8 +1985,7 @@ private slots:
              "Quiet hours until " + locale.toString(QTime(7, 0), QLocale::ShortFormat));
     schedule.windows += {{0x20, QTime(7, 0), QTime(0, 0)}, {0x40, QTime(0, 0), QTime(9, 0)}};
     QCOMPARE(quietHoursText(schedule, friday),
-             "Quiet hours until " + locale.dayName(7) + " " +
-                 locale.toString(QTime(9, 0), QLocale::ShortFormat));
+             "Quiet hours until Sunday " + locale.toString(QTime(9, 0), QLocale::ShortFormat));
     schedule.windows = {{0x7f, QTime(0, 0), QTime(12, 0)}, {0x7f, QTime(12, 0), QTime(0, 0)}};
     QCOMPARE(quietHoursText(schedule, friday), QString("Quiet hours"));
   }
@@ -1985,6 +2016,154 @@ private slots:
     dashboard->findChild<QPushButton *>("studioBegin")->click();
     QVERIFY(visibleCard());
     QTRY_VERIFY(schedule->text().startsWith("Practice session"));
+  }
+  void quietHoursSettingsHoldAndRestoreCards() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("speech/enabled", false);
+    prefs.setValue("sound_enabled", false);
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(true, true);
+    Card *card = nullptr;
+    auto locate = [&] {
+      for (auto *window : QApplication::topLevelWidgets())
+        if (auto *candidate = qobject_cast<Card *>(window);
+            candidate && candidate->isVisible())
+          card = candidate;
+      return card != nullptr;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(locate(), 2000);
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    auto *schedule = dashboard->findChild<QLabel *>("practiceSchedule");
+    auto *pause = dashboard->findChild<QPushButton *>("pauseReminders");
+    auto *add = dashboard->findChild<QPushButton *>("addQuietHours");
+    QVERIFY(schedule && pause && add);
+    // Let removed rows finish deleting, as the event loop would between clicks.
+    auto rows = [dashboard] {
+      QTest::qWait(1);
+      return dashboard->findChildren<QFrame *>("quietHoursRow");
+    };
+    add->click();
+    QCOMPARE(rows().size(), 1);
+    QCOMPARE(QuietSchedule::parse(QSettings(dir.path() + "/settings.ini", QSettings::IniFormat)
+                                      .value("practice/quiet_hours").toStringList())
+                 .serialize(),
+             QStringList{"1111100,09:00,17:00"});
+    // An untouched card hides as soon as the schedule covers now.
+    coverNow(rows().first());
+    QVERIFY(!card->isVisible());
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    // Pausing during quiet hours outlasts them.
+    pause->click();
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QVERIFY(!card->isVisible());
+    QTRY_COMPARE(schedule->text(), QString("Practice is paused"));
+    QVERIFY(rows().isEmpty());
+    QVERIFY(QSettings(dir.path() + "/settings.ini", QSettings::IniFormat)
+                .value("practice/quiet_hours").toStringList().join("").isEmpty());
+    pause->click();
+    QVERIFY(card->isVisible());
+    // Resuming during quiet hours shows nothing; the card returns when they end.
+    add->click();
+    coverNow(rows().first());
+    QVERIFY(!card->isVisible());
+    pause->click();
+    pause->click();
+    QVERIFY(!card->isVisible());
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QVERIFY(card->isVisible());
+    // A card in use stays through the start of quiet hours.
+    QTest::mouseClick(card->findChild<QFrame *>("wordStage"), Qt::LeftButton);
+    QVERIFY(card->isEngaged());
+    add->click();
+    coverNow(rows().first());
+    QVERIFY(card->isVisible());
+    for (int position = 1; position <= 2; ++position) {
+      QVERIFY(card->isVisible());
+      answer(card);
+    }
+    QTRY_VERIFY(!card->isVisible());
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    // Quiet ending starts a fresh interval rather than an immediate card.
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QTRY_VERIFY(schedule->text().startsWith("Next practice in 4:5") ||
+                schedule->text() == "Next practice in 5:00");
+    QVERIFY(!card->isVisible());
+  }
+  void quietHoursRowsAreKeyboardReachable() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("practice/quiet_hours", QStringList{"0000011,22:00,07:00"});
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.showSettings();
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    QVERIFY(QTest::qWaitForWindowExposed(dashboard));
+    auto *add = dashboard->findChild<QPushButton *>("addQuietHours");
+    add->click();
+    QTest::qWait(1);
+    const auto rows = dashboard->findChildren<QFrame *>("quietHoursRow");
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(QApplication::focusWidget(), rows[1]->findChildren<QPushButton *>().first());
+    QStringList expected;
+    for (auto *row : rows) {
+      const auto buttons = row->findChildren<QPushButton *>();
+      for (int i = 0; i < 7; ++i) {
+        QCOMPARE(buttons[i]->accessibleName(), QLocale(QLocale::English).dayName(i + 1));
+        QVERIFY(buttons[i]->isCheckable());
+        expected << buttons[i]->accessibleName();
+      }
+      const auto edits = row->findChildren<QTimeEdit *>();
+      QCOMPARE(edits[0]->accessibleName(), QString("Quiet hours start"));
+      QCOMPARE(edits[1]->accessibleName(), QString("Quiet hours end"));
+      QCOMPARE(row->findChild<QPushButton *>("quiet")->accessibleName(), QString("Remove quiet hours"));
+      expected << "Quiet hours start" << "Quiet hours end" << "Remove quiet hours";
+    }
+    QVERIFY(rows[0]->findChildren<QPushButton *>()[5]->isChecked());
+    QVERIFY(!rows[0]->findChildren<QPushButton *>()[4]->isChecked());
+    auto hint = [](QFrame *row, const QString &text) {
+      const auto labels = row->findChildren<QLabel *>();
+      return std::any_of(labels.begin(), labels.end(),
+                         [&](QLabel *l) { return l->text() == text; });
+    };
+    QVERIFY(hint(rows[0], "Ends the next day"));
+    QVERIFY(!hint(rows[1], "Ends the next day"));
+    rows[1]->findChildren<QTimeEdit *>()[1]->setTime(QTime(9, 0));
+    QVERIFY(hint(rows[1], "Choose different times"));
+    expected << "Add quiet hours";
+    auto *snooze = dashboard->findChild<QSpinBox *>("snoozeMinutes");
+    snooze->setFocus(Qt::TabFocusReason);
+    auto nameOf = [](QWidget *widget) {
+      if (auto *button = qobject_cast<QAbstractButton *>(widget);
+          button && button->accessibleName().isEmpty())
+        return button->text();
+      return widget ? widget->accessibleName() : QString();
+    };
+    // Tab also steps through the hour and minute sections of a time edit.
+    QStringList reached;
+    for (int i = 0; i < 80 && reached.value(reached.size() - 1) != "Add quiet hours"; ++i) {
+      QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+      const auto name = nameOf(QApplication::focusWidget());
+      if (reached.isEmpty() || reached.last() != name)
+        reached << name;
+    }
+    QCOMPARE(reached, expected);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Space);
+    QTest::qWait(1);
+    QCOMPARE(dashboard->findChildren<QFrame *>("quietHoursRow").size(), 3);
+    // Removing the last row hands focus to Add rather than dropping it.
+    auto *third = dashboard->findChildren<QFrame *>("quietHoursRow").last();
+    QCOMPARE(QApplication::focusWidget(), third->findChildren<QPushButton *>().first());
+    third->findChild<QPushButton *>("quiet")->setFocus();
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Space);
+    QCOMPARE(QApplication::focusWidget(), add);
   }
   void sessionClockAndCardProgress() {
     PracticeClock clock;

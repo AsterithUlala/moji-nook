@@ -86,6 +86,15 @@ Session size is adjustable from one to 25. The next interval starts after
 completing or ending the session, not after revealing an answer. Busy time does
 not accumulate a backlog of cards.
 
+**Quiet hours** keep cards away at times you choose, such as work hours or
+overnight. Add them in **Settings → Practice → Schedule**, then choose the days
+and a start and end time. Each window belongs to the day it starts, so Friday
+22:30 to 07:00 also covers early Saturday. During quiet hours, Moji Nook offers
+no sessions and builds no backlog. A card you have not clicked yet steps aside
+and returns when quiet hours end, and a fresh interval starts then. **Practice
+now** still works during quiet hours. Quiet hours and **Pause reminders** are
+separate. A pause stays on until you resume it, even after quiet hours end.
+
 Cards appear in your chosen display and corner without requesting keyboard
 focus. Click a card to interact. **Identify displays** shows numbered markers;
 changing the display or corner shows an independent sample. A disconnected
