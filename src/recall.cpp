@@ -45,6 +45,7 @@ Memory estimateMemory(const QVector<Subject> &pool,
                       const QVector<GradedAttempt> &attempts,
                       const QDateTime &now, const QDate &today) {
   Memory out;
+  const QDateTime utc = now.toUTC();
   QHash<int, const Subject *> subjects;
   for (const auto &s : pool) {
     subjects.insert(s.id, &s);
@@ -62,7 +63,7 @@ Memory estimateMemory(const QVector<Subject> &pool,
   for (const auto *a : ordered) {
     const Subject *s = subjects.value(a->subjectId);
     // The source's own review already reflects anything practiced before it.
-    if (!s || a->at > now ||
+    if (!s || a->at > utc ||
         (s->reviewedAt.isValid() && a->at <= s->reviewedAt))
       continue;
     auto it = out.find(skillKey(a->subjectId, a->reading));

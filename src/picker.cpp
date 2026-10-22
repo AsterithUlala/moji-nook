@@ -130,14 +130,16 @@ Challenge Picker::next(const QVector<Subject> &pool, const QList<int> &recent,
   };
   QVector<Skill> skills;
   const QDate today = now.toLocalTime().date();
+  // Local-time arithmetic converts zones on every call; convert once.
+  const QDateTime utc = now.toUTC();
   for (const auto &s : pool)
     if (!excluded.contains(s.id))
       for (bool reading : {false, true})
         if (!reading || !s.readings.isEmpty()) {
           const auto key = skillKey(s.id, reading);
           const auto m = memory.value(key);
-          skills.append({&s, reading, key, recallProbability(m, now),
-                         rested(m, now, today)});
+          skills.append({&s, reading, key, recallProbability(m, utc),
+                         rested(m, utc, today)});
         }
   if (c.mode == Mode::Typing &&
       std::none_of(skills.begin(), skills.end(),
