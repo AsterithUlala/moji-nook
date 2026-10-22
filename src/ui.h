@@ -7,6 +7,7 @@
 #include "sync.h"
 #include "speech.h"
 #include "progression_popup.h"
+#include "quiet_hours.h"
 #include "theme.h"
 #include <QtWidgets>
 
@@ -21,15 +22,24 @@ public:
   int intervalMs = 300000;
   int sessionSize = 2, sessionTotal = 2, position = 1;
   QString sessionId;
-  bool pending = false, paused = false;
+  // Pause is the learner's choice and quiet follows quietHours; either one
+  // holds scheduled sessions without touching the other.
+  bool pending = false, paused = false, quiet = false;
   // The running timer is a snooze, not the regular interval.
   bool snoozed = false;
+  QuietSchedule quietHours;
   void request();
+  void offer();
   void complete();
   void advance();
   void setPaused(bool value);
+  void refreshQuiet();
 signals:
   void due();
+  void quietChanged(bool quiet);
+
+private:
+  void startInterval();
 };
 
 class Card : public QWidget {
@@ -46,6 +56,7 @@ public:
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
   void setProgressTile(const std::optional<ProgressTile> &tile);
+  bool isEngaged() const { return engaged; }
   Challenge challenge;
 signals:
   void completed(Challenge challenge, int outcome, qint64 activeMs);
@@ -270,5 +281,6 @@ QIcon appIcon();
 QIcon brandMark(int theme = defaultTheme);
 QString syncAgeText(const QDateTime &last,
                     const QDateTime &now = QDateTime::currentDateTimeUtc());
+QString quietHoursText(const QuietSchedule &schedule, const QDateTime &now);
 bool automaticSyncDue(const QDateTime &lastSuccess,
                       const QDateTime &lastAttempt, const QDateTime &now);

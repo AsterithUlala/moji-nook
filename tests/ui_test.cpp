@@ -32,6 +32,17 @@ class UiTest : public QObject {
     state.settled = 1;
     return state;
   }
+  // A window that is quiet right now, attached to the day it starts.
+  static QuietWindow quietAround(int beforeMs, int afterMs) {
+    const auto now = QDateTime::currentDateTime();
+    const auto start = now.addMSecs(-beforeMs), end = now.addMSecs(afterMs);
+    return {quint8(1 << (start.date().dayOfWeek() - 1)), start.time(), end.time()};
+  }
+  static QString quietEntry(const QuietWindow &window) {
+    QuietSchedule schedule;
+    schedule.windows = {window};
+    return schedule.serialize().first();
+  }
 private slots:
   void progressionRecapIsPassiveAndEmptyNoticesStayHidden() {
     ProgressRecap recap;
@@ -1872,6 +1883,108 @@ private slots:
     QCOMPARE(combo.currentIndex(), 2);
     QTest::keyClick(&spin, Qt::Key_Up);
     QCOMPARE(spin.value(), 6);
+  }
+  void quietHoursHoldScheduledSessions() {
+    PracticeClock clock;
+    clock.intervalMs = 30;
+    QSignalSpy due(&clock, &PracticeClock::due);
+    QSignalSpy quietChanges(&clock, &PracticeClock::quietChanged);
+    clock.complete();
+    QVERIFY(clock.timer.isActive());
+    // Quiet hours begin between heartbeats; the expiring timer must not offer.
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 0);
+    QVERIFY(clock.quiet);
+    QVERIFY(!clock.timer.isActive());
+    QCOMPARE(quietChanges.count(), 1);
+    QCOMPARE(quietChanges.last().first().toBool(), true);
+    clock.refreshQuiet();
+    QCOMPARE(quietChanges.count(), 1);
+    // Quiet ending starts a fresh interval: no immediate card, no backlog.
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(!clock.quiet);
+    QCOMPARE(quietChanges.last().first().toBool(), false);
+    QCOMPARE(due.count(), 0);
+    QVERIFY(clock.timer.isActive());
+    QTRY_COMPARE(due.count(), 1);
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 1);
+    clock.complete();
+    // An explicit session still runs to completion during quiet hours.
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    QVERIFY(!clock.timer.isActive());
+    clock.offer();
+    QCOMPARE(due.count(), 1);
+    clock.request();
+    QCOMPARE(due.count(), 2);
+    clock.advance();
+    QCOMPARE(clock.position, 2);
+    QCOMPARE(due.count(), 3);
+    clock.advance();
+    QVERIFY(!clock.pending);
+    QVERIFY(!clock.timer.isActive());
+    // Pause and quiet hold sessions independently.
+    clock.setPaused(true);
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.paused);
+    QVERIFY(!clock.timer.isActive());
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.setPaused(false);
+    QVERIFY(!clock.paused);
+    QVERIFY(clock.quiet);
+    QVERIFY(!clock.timer.isActive());
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 3);
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.timer.isActive());
+  }
+  void quietHoursTextNamesTheEnd() {
+    const QDateTime friday(QDate(2026, 10, 23), QTime(23, 0));
+    const QLocale locale;
+    QuietSchedule schedule;
+    schedule.windows = {{0x10, QTime(22, 0), QTime(7, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday),
+             "Quiet hours until " + locale.toString(QTime(7, 0), QLocale::ShortFormat));
+    schedule.windows += {{0x20, QTime(7, 0), QTime(0, 0)}, {0x40, QTime(0, 0), QTime(9, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday),
+             "Quiet hours until " + locale.dayName(7) + " " +
+                 locale.toString(QTime(9, 0), QLocale::ShortFormat));
+    schedule.windows = {{0x7f, QTime(0, 0), QTime(12, 0)}, {0x7f, QTime(12, 0), QTime(0, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday), QString("Quiet hours"));
+  }
+  void quietHoursAtLaunchWaitForPracticeNow() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("practice/quiet_hours", QStringList{quietEntry(quietAround(60000, 3600000))});
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(true, true);
+    auto visibleCard = [] {
+      for (auto *window : QApplication::topLevelWidgets())
+        if (auto *candidate = qobject_cast<Card *>(window);
+            candidate && candidate->isVisible())
+          return candidate;
+      return static_cast<Card *>(nullptr);
+    };
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    QVERIFY(dashboard);
+    auto *schedule = dashboard->findChild<QLabel *>("practiceSchedule");
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    QCOMPARE(dashboard->findChild<QLabel *>("studioHero")->text(), QString("Quiet hours"));
+    QTest::qWait(1200);
+    QVERIFY(!visibleCard());
+    dashboard->findChild<QPushButton *>("studioBegin")->click();
+    QVERIFY(visibleCard());
+    QTRY_VERIFY(schedule->text().startsWith("Practice session"));
   }
   void sessionClockAndCardProgress() {
     PracticeClock clock;

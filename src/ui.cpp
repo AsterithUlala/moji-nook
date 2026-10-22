@@ -25,6 +25,8 @@ App::App(Store &s, const QString &path, QObject *parent)
   clock.sessionSize = qBound(1, settings.value("session_count", 2).toInt(),
              PracticeClock::maxSessionSize);
   snoozeMinutes = qBound(1, settings.value("snooze_minutes", 30).toInt(), 240);
+  clock.quietHours =
+      QuietSchedule::parse(settings.value("practice/quiet_hours").toStringList());
   dashboard.setWindowTitle("Moji Nook · Japanese practice");
   dashboard.setWindowIcon(appIcon());
   const auto available = QGuiApplication::primaryScreen()->availableGeometry().size();
@@ -51,7 +53,7 @@ App::App(Store &s, const QString &path, QObject *parent)
       invalidateStats();
       // Anki-only first use starts with an empty pool and no running interval.
       if (!pool.isEmpty() && !clock.pending && !clock.timer.isActive())
-        clock.request();
+        clock.offer();
     }
   });
   connect(ankiPanel, &AnkiPanel::previewRequested, this, [this] {
@@ -76,7 +78,6 @@ App::App(Store &s, const QString &path, QObject *parent)
                     "your audio device or disable sounds in Settings.");
   });
   tray.setIcon(appIcon());
-  tray.setToolTip("Moji Nook · extra Japanese practice");
   trayMenu.addAction("Practice now", this, &App::requestPractice);
   trayMenu.addAction("Overview", this, &App::showDashboard);
   trayMenu.addAction("Settings", this, &App::showSettings);
@@ -88,7 +89,7 @@ App::App(Store &s, const QString &path, QObject *parent)
       toggle->setText(paused ? "Resume reminders" : "Pause reminders");
     if (paused)
       card.hide();
-    else if (clock.pending)
+    else if (clock.pending && !clock.quiet)
       card.show();
     if (paused) {
       ++recapEpoch;
@@ -109,6 +110,15 @@ App::App(Store &s, const QString &path, QObject *parent)
           });
   connect(&card, &Card::dashboardRequested, this, &App::showDashboard);
   connect(&clock, &PracticeClock::due, this, &App::showCard);
+  connect(&clock, &PracticeClock::quietChanged, this, [this](bool quiet) {
+    // Hide an untouched card like Pause does; a card in use stays.
+    if (quiet && !card.isEngaged())
+      card.hide();
+    else if (!quiet && clock.pending && !clock.paused)
+      card.show();
+    refreshHomeState();
+  });
+  clock.refreshQuiet();
   connect(&card, &Card::completed, this,
           [this](Challenge c, int outcome, qint64 ms) {
             PerformanceSpan timing("complete-answer");
@@ -169,16 +179,25 @@ App::App(Store &s, const QString &path, QObject *parent)
               refreshPool();
               invalidateStats();
               if (!clock.pending && !clock.timer.isActive())
-                clock.request();
+                clock.offer();
             }
           });
   connect(&heartbeat, &QTimer::timeout, this, [this] {
+    clock.refreshQuiet();
     const auto age = syncAgeText(lastSyncAt);
     if (syncAge->text() != age)
       syncAge->setText(age);
+    const auto now = QDateTime::currentDateTime();
+    const QString tip = "Moji Nook · " +
+        (clock.quiet ? quietHoursText(clock.quietHours, now)
+                     : QString("extra Japanese practice"));
+    if (tray.toolTip() != tip)
+      tray.setToolTip(tip);
     QString next;
     if (clock.paused)
       next = "Practice is paused";
+    else if (clock.quiet && !card.isVisible())
+      next = quietHoursText(clock.quietHours, now);
     else if (clock.pending)
       next = QString("Practice session · card %1 of %2 · timer "
                      "starts after the session")
@@ -374,6 +393,7 @@ void App::refreshHomeState() {
   const bool ready = !pool.isEmpty();
   homeState->setText(!ready ? "No words available"
       : clock.paused ? "Paused"
+      : clock.quiet && !card.isVisible() ? "Quiet hours"
       : clock.pending ? "Session in progress"
       : "Ready");
   homeBegin->setText(!ready ? "Choose a practice source"
@@ -457,6 +477,16 @@ QString syncAgeText(const QDateTime &last, const QDateTime &now) {
                 : seconds < 86400 ? QString("%1 hr ago").arg(seconds / 3600)
                                   : QString("%1 days ago").arg(seconds / 86400);
   return "WaniKani · synced " + age + " · daily auto-sync";
+}
+QString quietHoursText(const QuietSchedule &schedule, const QDateTime &now) {
+  const auto end = schedule.endAfter(now);
+  if (!end)
+    return "Quiet hours";
+  const QLocale locale;
+  QString until = locale.toString(end->time(), QLocale::ShortFormat);
+  if (now.secsTo(*end) >= 86400)
+    until = locale.dayName(end->date().dayOfWeek()) + " " + until;
+  return "Quiet hours until " + until;
 }
 bool automaticSyncDue(const QDateTime &lastSuccess,
                       const QDateTime &lastAttempt, const QDateTime &now) {
@@ -564,7 +594,7 @@ void App::start(bool demo, bool trayOnly) {
   if (!pool.isEmpty())
     QTimer::singleShot(800, &clock, [this] {
       if (!clock.pending && !clock.timer.isActive())
-        clock.request();
+        clock.offer();
     });
   const auto synced =
       QDateTime::fromString(store.cache()["synced_at"].toString(), Qt::ISODate);
