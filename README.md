@@ -23,7 +23,8 @@ Nook itself waits in the system tray.*
 - **Your WaniKani words:** connect once and Moji Nook brings in the kanji and
   vocabulary you have already learned.
 - **Three ways to answer:** type a reading, pick from multiple choice, or
-  rate your own recall. Readings and meanings are practiced separately.
+  type your answer before rating your own recall. Readings and meanings are
+  practiced separately.
 - **Offline pronunciation:** hear Japanese read aloud on the card without a network connection.
 - **Extra attention where it helps:** words you have found difficult get more attention in the mix.
 - **A record of practice:** each word earns a tile once you have recalled it on
