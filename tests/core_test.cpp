@@ -268,6 +268,58 @@ private slots:
     QCOMPARE(p[0].kanjiReadingTypes.value("ひ"), QString("kunyomi"));
     QCOMPARE(p[0].startedAt.date(), QDate(2026, 1, 1));
   }
+  void memoryHelpData() {
+    auto kanji = [](int id, const QString &characters, int level,
+                    const QString &meaning, const QString &reading,
+                    QJsonArray similar = {}) {
+      QJsonObject data{{"characters", characters},
+                       {"level", level},
+                       {"visually_similar_subject_ids", similar},
+                       {"meaning_mnemonic", "Meaning for " + characters},
+                       {"reading_mnemonic", "Reading for " + characters}};
+      data["meanings"] = QJsonArray{
+          QJsonObject{{"meaning", "Alt"}, {"accepted_answer", true}, {"primary", false}},
+          QJsonObject{{"meaning", meaning}, {"accepted_answer", true}, {"primary", true}}};
+      data["readings"] = QJsonArray{
+          QJsonObject{{"reading", "べつ"}, {"type", "kunyomi"}, {"primary", false},
+                      {"accepted_answer", false}},
+          QJsonObject{{"reading", reading}, {"type", "onyomi"}, {"primary", true},
+                      {"accepted_answer", true}}};
+      return QJsonObject{{"id", id}, {"object", "kanji"}, {"data", data}};
+    };
+    const QJsonArray subjects{kanji(1, "大", 1, "Big", "たい", {4, 2, 3, 99}),
+                              kanji(2, "犬", 1, "Dog", "けん"),
+                              kanji(3, "太", 2, "Fat", "た"),
+                              kanji(4, "丈", 5, "Length", "じょう")};
+    QJsonArray assignments;
+    for (int id : {1, 2})
+      assignments.append(QJsonObject{
+          {"data", QJsonObject{{"subject_id", id}, {"srs_stage", 3},
+                               {"started_at", "2026-01-01T00:00:00Z"}}}});
+    const auto pool = parseSubjects(subjects, assignments, {}, 3);
+    QCOMPARE(pool.size(), 2);
+    const auto &big = pool[0];
+    QCOMPARE(big.characters, QString("大"));
+    QCOMPARE(big.meaningMnemonic, QString("Meaning for 大"));
+    QCOMPARE(big.readingMnemonic, QString("Reading for 大"));
+    QCOMPARE(big.similarKanji.size(), 2);
+    QCOMPARE(big.similarKanji[0].characters, QString("犬"));
+    QCOMPARE(big.similarKanji[0].meaning, QString("Dog"));
+    QCOMPARE(big.similarKanji[0].reading, QString("けん"));
+    QCOMPARE(big.similarKanji[1].characters, QString("太"));
+    QCOMPARE(big.similarKanji[1].meaning, QString("Fat"));
+    QCOMPARE(big.similarKanji[1].reading, QString("た"));
+    QCOMPARE(big.similar, (QList<int>{4, 2, 3, 99}));
+    QVERIFY(pool[1].similarKanji.isEmpty());
+    QCOMPARE(mnemonicHtml("A <kanji>big</kanji> <radical>person</radical> "
+                          "reads <reading>たい</reading> as <meaning>big</meaning>, "
+                          "<vocabulary>大人</vocabulary> <ja>大きい</ja>."),
+             QString("A <b>big</b> <b>person</b> reads <b>たい</b> as <b>big</b>, "
+                     "<b>大人</b> 大きい."));
+    QCOMPARE(mnemonicHtml("<script>alert('x')</script> & <b>bold</b>\nnext"),
+             QString("&lt;script&gt;alert('x')&lt;/script&gt; &amp; "
+                     "&lt;b&gt;bold&lt;/b&gt;<br>next"));
+  }
   void weightsAndCooldown() {
     QCOMPARE(stageWeight(0), 0.0);
     QCOMPARE(stageWeight(1), 4.0);
