@@ -509,17 +509,26 @@ void App::showCard() {
     evidence[it.key()].recent += it->recent;
     evidence[it.key()].persistent += it->persistent;
   }
+  const auto &source = useAnki ? ankiPool : wkPool;
+  const auto now = QDateTime::currentDateTime();
+  const auto memory =
+      estimateMemory(source, store.gradedAttempts(), now, QDate::currentDate());
+  const SelectionMix mix{newestPercent->value(),
+                         recentPercent->value(),
+                         persistentPercent->value(),
+                         burnedPercent->value(),
+                         recallPercent->value(),
+                         typedPercent->value(),
+                         weights};
   auto challenge =
-      picker.next(useAnki ? ankiPool : wkPool, store.recentSubjects(),
-                  evidence, recentPercent->value(), persistentPercent->value(),
-                  recallPercent->value(), typedPercent->value(), weights,
-                  newestPercent->value());
+      picker.next(source, store.recentSubjects(), evidence, memory, mix, now);
   challenge.event["session_id"] = clock.sessionId;
   challenge.event["session_position"] = clock.position;
   challenge.event["session_total"] = clock.sessionTotal;
   challenge.event["interval_minutes"] = clock.intervalMs / 60000;
   challenge.event["recent_share"] = recentPercent->value();
   challenge.event["persistent_share"] = persistentPercent->value();
+  challenge.event["burned_share"] = burnedPercent->value();
   challenge.event["recall_share"] = recallPercent->value();
   challenge.event["typed_share"] = typedPercent->value();
   QJsonArray weightSnapshot;
@@ -529,7 +538,9 @@ void App::showCard() {
   challenge.event["newest_share"] = newestPercent->value();
   challenge.event["newest_count"] = 30;
   challenge.event["anki_share"] = ankiShare;
-  challenge.event["picker_version"] = 4;
+  challenge.event["recall_estimate"] = recallProbability(
+      memory.value(skillKey(challenge.subject.id, challenge.reading)), now);
+  challenge.event["picker_version"] = 5;
   challenge.event["demo"] = demoMode;
   challenge.event["transition_outcome"] = transitionOutcome;
   transitionOutcome = -1;

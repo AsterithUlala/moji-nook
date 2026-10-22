@@ -1493,6 +1493,42 @@ private slots:
     c.mode = Mode::Choice;
     QVERIFY(c.readingRetryHint("ashi").isEmpty());
   }
+  void burnedShareKeepsSavedMix_data() {
+    QTest::addColumn<QVariantList>("saved");
+    QTest::addColumn<int>("burned");
+    QTest::newRow("saved mix gains the default")
+        << QVariantList{30, 25, 20, {}} << 10;
+    QTest::newRow("full mix has no room") << QVariantList{0, 95, 5, {}} << 0;
+    QTest::newRow("tight mix clamps") << QVariantList{50, 30, 15, {}} << 5;
+    QTest::newRow("saved burned share") << QVariantList{30, 25, 20, 3} << 3;
+  }
+  void burnedShareKeepsSavedMix() {
+    QFETCH(QVariantList, saved);
+    QFETCH(int, burned);
+    QTemporaryDir directory;
+    const QStringList keys = {"newest_share", "recent_share",
+                              "persistent_share", "burned_share"};
+    {
+      QSettings settings(directory.path() + "/settings.ini",
+                         QSettings::IniFormat);
+      for (int i = 0; i < keys.size(); ++i)
+        if (saved[i].isValid())
+          settings.setValue(keys[i], saved[i]);
+    }
+    Store store(directory.path());
+    App app(store, directory.path());
+    app.showDashboard();
+    QSlider *slider = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *found = window->findChild<QSlider *>("burnedShare"))
+        slider = found;
+    QVERIFY(slider);
+    QCOMPARE(slider->value(), burned);
+    QSettings after(directory.path() + "/settings.ini", QSettings::IniFormat);
+    for (int i = 0; i < 3; ++i)
+      QCOMPARE(after.value(keys[i]).toInt(), saved[i].toInt());
+    QCOMPARE(after.value("burned_share").toInt(), burned);
+  }
   void dashboardNavigationAndFeedbackSettings() {
     QTemporaryDir directory;
     Store store(directory.path());
@@ -1548,9 +1584,26 @@ private slots:
     QCOMPARE(newest->value(), 30);
     QCOMPARE(recent->value(), 25);
     QCOMPARE(persistent->value(), 20);
+    auto *burned = tabs->findChild<QSlider *>("burnedShare");
+    QVERIFY(burned);
+    QCOMPARE(burned->accessibleName(), QString("Burned items"));
+    QCOMPARE(burned->value(), 10);
+    QCOMPARE(burned->maximum(), 25);
+    auto labelText = [tabs](const QString &prefix) {
+      for (auto *l : tabs->findChildren<QLabel *>())
+        if (l->text().startsWith(prefix))
+          return l->text();
+      return QString();
+    };
+    QCOMPARE(labelText("Broad recall ·"), QString("Broad recall · 15%"));
+    QCOMPARE(labelText("Mix:"),
+             QString("Mix: 30% newest · 25% recent · 20% persistent · 10% "
+                     "burned · 15% broad"));
     newest->setValue(0);
     recent->setValue(95);
     QCOMPARE(persistent->value(), 5);
+    QCOMPARE(burned->value(), 0);
+    QCOMPARE(labelText("Broad recall ·"), QString("Broad recall · 0%"));
     recall->setValue(100);
     QCOMPARE(typed->value(), 0);
     QVERIFY(motion);
@@ -1567,6 +1620,7 @@ private slots:
     QCOMPARE(saved.value("newest_share").toInt(), 0);
     QCOMPARE(saved.value("recent_share").toInt(), 95);
     QCOMPARE(saved.value("persistent_share").toInt(), 5);
+    QCOMPARE(saved.value("burned_share").toInt(), 0);
     QCOMPARE(saved.value("recall_share").toInt(), 100);
     QCOMPARE(saved.value("typed_share").toInt(), 0);
     QVERIFY(!saved.value("sound_enabled").toBool());
@@ -1814,6 +1868,11 @@ private slots:
     for (int position = 1; position <= 2; ++position) {
       QCOMPARE(card->challenge.event["session_position"].toInt(), position);
       QCOMPARE(card->challenge.event["session_total"].toInt(), 2);
+      QCOMPARE(card->challenge.event["picker_version"].toInt(), 5);
+      QCOMPARE(card->challenge.event["burned_share"].toInt(), 10);
+      const double estimate =
+          card->challenge.event["recall_estimate"].toDouble(-1);
+      QVERIFY(estimate >= 0 && estimate <= 1);
       const auto challenge = card->challenge;
       if (challenge.mode == Mode::Recall) {
         card->findChild<QPushButton *>("revealAnswer")->click();

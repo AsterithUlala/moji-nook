@@ -95,16 +95,19 @@ public:
   QString historyHtml(int page = 0) const;
 };
 
+struct SelectionMix {
+  int newest = 30, recent = 25, persistent = 20, burned = 10; // Broad: rest.
+  int recall = 50, typed = 25;                                // Choice: rest.
+  QVector<double> stageWeights;
+};
+
 class Picker {
 public:
   explicit Picker(quint32 seed = QRandomGenerator::global()->generate())
       : random(seed) {}
   Challenge next(const QVector<Subject> &pool, const QList<int> &recent,
-                 const Evidence &evidence = {},
-                 int recentShare = 40, int persistentShare = 20,
-                 int recallShare = 50, int typedShare = 25,
-                 const QVector<double> &masteryWeights = {},
-                 int newestShare = 0);
+                 const Evidence &evidence, const Memory &memory,
+                 const SelectionMix &mix, const QDateTime &now);
 
 private:
   QRandomGenerator random;

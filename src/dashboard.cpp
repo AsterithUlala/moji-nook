@@ -462,6 +462,13 @@ void App::buildDashboard() {
   persistentPercent->setValue(
       qBound(0, settings.value("persistent_share", 20).toInt(),
              persistentPercent->maximum()));
+  burnedPercent = new ScrollSafeSlider;
+  burnedPercent->setObjectName("burnedShare");
+  burnedPercent->setRange(0, 100 - newestPercent->value() -
+                                 recentPercent->value() -
+                                 persistentPercent->value());
+  burnedPercent->setValue(qBound(0, settings.value("burned_share", 10).toInt(),
+                                 burnedPercent->maximum()));
   recentPercent->setAccessibleName("Recent struggles percentage");
   persistentPercent->setAccessibleName("Persistent trouble percentage");
   form->addWidget(label("Which items?", "muted"));
@@ -469,30 +476,36 @@ void App::buildDashboard() {
   form->addWidget(label("Latest 30 learned items · equal odds.", "muted"));
   sliderRow(form, recentPercent, "Recent troubles");
   sliderRow(form, persistentPercent, "Persistent trouble");
+  sliderRow(form, burnedPercent, "Burned items");
+  form->addWidget(label("Items WaniKani no longer reviews.", "muted"));
   auto *broadShare = label({}, "muted");
   form->addWidget(broadShare);
   auto updateMix = [this, broadShare, mixSummary] {
     recentPercent->setMaximum(100 - newestPercent->value());
     persistentPercent->setMaximum(100 - newestPercent->value() -
                                   recentPercent->value());
+    burnedPercent->setMaximum(100 - newestPercent->value() -
+                              recentPercent->value() -
+                              persistentPercent->value());
     settings.setValue("newest_share", newestPercent->value());
     settings.setValue("recent_share", recentPercent->value());
     settings.setValue("persistent_share", persistentPercent->value());
-    broadShare->setText(QString("Broad recall · %1%")
-                            .arg(100 - newestPercent->value() -
-                                 recentPercent->value() -
-                                 persistentPercent->value()));
-    mixSummary->setText(
-        QString("Mix: %1% newest · %2% recent · %3% persistent · %4% broad")
-            .arg(newestPercent->value())
-            .arg(recentPercent->value())
-            .arg(persistentPercent->value())
-            .arg(100 - newestPercent->value() - recentPercent->value() -
-                 persistentPercent->value()));
+    settings.setValue("burned_share", burnedPercent->value());
+    const int broad = 100 - newestPercent->value() - recentPercent->value() -
+                      persistentPercent->value() - burnedPercent->value();
+    broadShare->setText(QString("Broad recall · %1%").arg(broad));
+    mixSummary->setText(QString("Mix: %1% newest · %2% recent · %3% "
+                                "persistent · %4% burned · %5% broad")
+                            .arg(newestPercent->value())
+                            .arg(recentPercent->value())
+                            .arg(persistentPercent->value())
+                            .arg(burnedPercent->value())
+                            .arg(broad));
   };
   connect(newestPercent, &QSlider::valueChanged, this, updateMix);
   connect(recentPercent, &QSlider::valueChanged, this, updateMix);
   connect(persistentPercent, &QSlider::valueChanged, this, updateMix);
+  connect(burnedPercent, &QSlider::valueChanged, this, updateMix);
   updateMix();
   form->addWidget(label("Challenge formats", "muted"));
   auto *readingRetries = new SettingsCheckBox("Retry alternate kanji readings");
