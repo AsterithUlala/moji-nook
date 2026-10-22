@@ -109,6 +109,8 @@ QString appStyle(int theme) {
         QLabel#challengeType { color:#ecf1ea; background:#293e33; border-radius:6px; padding:5px 8px; font-size:12px; }
         QLabel#supplement { color:#ecf1ea; font-size:14px; }
         QLabel#example { color:#a9bcb0; background:#20342a; padding:12px; border-radius:9px; font-size:12px; }
+        QFrame#memoryHelp { background:#20342a; border-radius:9px; }
+        QLabel#similarKanji, QLabel#mnemonic { color:#ecf1ea; font-size:12px; }
         QLabel#cardHint { color:#a9bcb0; font-size:12px; }
         QGroupBox { background:transparent; border:0; border-radius:0; margin-top:24px; padding:20px 8px 16px; font-weight:600; }
         QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0; }

@@ -306,6 +306,8 @@ bool App::savePreview(const QString &path) {
     capture(card, QString("theme-%1-near-miss").arg(i));
     card.findChild<QPushButton *>("checkReading")->click();
     capture(card, QString("theme-%1-missed").arg(i));
+    card.findChild<QPushButton *>("countAsCorrect")->click();
+    capture(card, QString("theme-%1-typo-override").arg(i));
 
     Challenge choice = c;
     choice.mode = Mode::Choice;
@@ -330,6 +332,22 @@ bool App::savePreview(const QString &path) {
     card.findChild<QLineEdit *>("readingInput")->setText("ひ");
     card.findChild<QPushButton *>("checkReading")->click();
     capture(card, QString("theme-%1-reading-retry").arg(i));
+
+    Challenge memory = retry;
+    memory.subject.similarKanji = {{"目", "Eye", "もく"}, {"白", "White", "はく"},
+                                   {"旧", "Former", "きゅう"}};
+    memory.subject.readingMnemonic =
+        "Synthetic preview mnemonic: the <kanji>sun</kanji> greets you each "
+        "morning with a cheerful “<reading>にち</reading>”.";
+    card.setMissDetails(true);
+    card.present(memory, 5);
+    card.findChild<QLineEdit *>("readingInput")->setText("めい");
+    card.findChild<QPushButton *>("checkReading")->click();
+    qApp->processEvents();
+    card.findChild<QScrollArea *>("cardScroll")
+        ->ensureWidgetVisible(card.findChild<QWidget *>("memoryHelp"), 0, 0);
+    capture(card, QString("theme-%1-memory-help").arg(i));
+    card.setMissDetails(settings.value("practice/miss_details", false).toBool());
 
     Challenge local = c;
     local.mode = Mode::Recall;

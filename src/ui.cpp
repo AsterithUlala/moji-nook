@@ -356,6 +356,7 @@ void App::applyFeedbackSettings() {
         settings.value("practice/near_miss_retry", true).toBool());
     target->setTypeBeforeReveal(
         settings.value("practice/type_before_reveal", true).toBool());
+    target->setMissDetails(settings.value("practice/miss_details", false).toBool());
   }
   applySpeechSettings();
 }

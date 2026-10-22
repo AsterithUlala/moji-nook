@@ -44,6 +44,7 @@ public:
   void setReadingRetries(bool enabled) { readingRetries = enabled; }
   void setNearMissRetries(bool enabled) { nearMissRetries = enabled; }
   void setTypeBeforeReveal(bool enabled) { typeBeforeReveal = enabled; }
+  void setMissDetails(bool enabled) { missDetails = enabled; }
   void setAnkiAudio(bool enabled, int volume, bool autoplay = true);
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
@@ -72,6 +73,8 @@ private:
   QScrollArea *cardScroll;
   QWidget *cardContent, *submittedRow;
   QWidget *choiceArea;
+  QFrame *memoryHelp;
+  QLabel *similarCaption, *similarKanji, *mnemonicCaption, *mnemonic;
   QVBoxLayout *choiceLayout;
   QElapsedTimer active, presented;
   bool engaged = false, resolved = false, pending = false;
@@ -83,7 +86,7 @@ private:
   CardAccent *accent;
   bool reducedMotion = true;
   bool readingRetries = true, nearMissRetries = true;
-  bool typeBeforeReveal = true;
+  bool typeBeforeReveal = true, missDetails = false;
   // Snapshot per card so a settings change cannot strand a shown card.
   bool attemptFirst = false;
   QLabel *readingWarning;
@@ -96,6 +99,8 @@ private:
   void showAnswer();
   void revealAnswer();
   void showSubmitted(const QString &text, const QString &caption, bool missed);
+  bool showMemoryHelp();
+  void stampGrade();
   void speakAnswer();
   void grade(bool correct, const QString &response);
   void fitCard();

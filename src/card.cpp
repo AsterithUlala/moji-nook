@@ -194,6 +194,20 @@ Card::Card(QWidget *parent)
   supplement = label({}, "supplement");
   supplement->setAlignment(Qt::AlignCenter);
   layout->addWidget(supplement);
+  memoryHelp = new QFrame;
+  memoryHelp->setObjectName("memoryHelp");
+  auto *helpLayout = new QVBoxLayout(memoryHelp);
+  helpLayout->setContentsMargins(12, 10, 12, 10);
+  helpLayout->setSpacing(4);
+  similarCaption = label("Looks similar", "muted");
+  similarKanji = label({}, "similarKanji");
+  similarKanji->setTextFormat(Qt::RichText);
+  mnemonicCaption = label({}, "muted");
+  mnemonic = label({}, "mnemonic");
+  mnemonic->setTextFormat(Qt::RichText);
+  for (auto *part : {similarCaption, similarKanji, mnemonicCaption, mnemonic})
+    helpLayout->addWidget(part);
+  layout->addWidget(memoryHelp);
   exampleToggle = button("Show example", "quiet");
   exampleToggle->setObjectName("exampleToggle");
   exampleToggle->setCheckable(true);
@@ -244,7 +258,19 @@ Card::Card(QWidget *parent)
     result = 0;
     resolved = true;
     emit graded(false);
-    finish();
+    if (!showMemoryHelp()) {
+      finish();
+      return;
+    }
+    stampGrade();
+    miss->hide();
+    remember->hide();
+    done->show();
+    dismiss->setToolTip("Finish and keep this result · Esc ends session");
+    dismiss->setAccessibleName("Finish and keep this result");
+    if (engaged && isActiveWindow())
+      done->setFocus(Qt::OtherFocusReason);
+    fitCard();
   });
   connect(done, &QPushButton::clicked, this, [this] { finish(); });
   connect(typo, &QPushButton::clicked, this, [this] {
@@ -257,6 +283,7 @@ Card::Card(QWidget *parent)
     if (typo->hasFocus())
       done->setFocus(Qt::OtherFocusReason);
     typo->hide();
+    memoryHelp->hide();
     fitCard();
     if (!reducedMotion)
       accent->pulse(colors(themeIndex).accent, 320);
@@ -563,7 +590,8 @@ void Card::present(const Challenge &c, int minutes) {
   }
   for (QWidget *w :
        QList<QWidget *>{answer, feedback, supplement, context, miss, remember,
-                        done, submittedRow, answerCaption, exampleToggle, typo})
+                        done, submittedRow, answerCaption, exampleToggle, typo,
+                        memoryHelp})
     w->hide();
   answer->parentWidget()->hide();
   exampleToggle->setChecked(false);
@@ -790,6 +818,36 @@ void Card::showSubmitted(const QString &text, const QString &caption,
   submittedRow->show();
   answerCaption->show();
 }
+bool Card::showMemoryHelp() {
+  const auto &s = challenge.subject;
+  const QString text = challenge.reading ? s.readingMnemonic : s.meaningMnemonic;
+  if (!missDetails || s.source != "wanikani" ||
+      (s.similarKanji.isEmpty() && text.isEmpty()))
+    return false;
+  QStringList rows;
+  for (const auto &k : s.similarKanji) {
+    const QString detail =
+        k.reading.isEmpty() ? k.meaning : k.meaning + " · " + k.reading;
+    rows << QString("<span style=\"font-family:'Noto Sans CJK JP'; "
+                    "font-size:20px;\">%1</span>&nbsp;&nbsp;%2")
+                .arg(k.characters.toHtmlEscaped(), detail.toHtmlEscaped());
+  }
+  similarKanji->setText(rows.join("<br>"));
+  similarCaption->setVisible(!rows.isEmpty());
+  similarKanji->setVisible(!rows.isEmpty());
+  mnemonicCaption->setText(challenge.reading ? "Reading mnemonic"
+                                             : "Meaning mnemonic");
+  mnemonic->setText(mnemonicHtml(text));
+  mnemonicCaption->setVisible(!text.isEmpty());
+  mnemonic->setVisible(!text.isEmpty());
+  memoryHelp->show();
+  return true;
+}
+void Card::stampGrade() {
+  challenge.event["graded_at"] =
+      QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+  challenge.event["graded_local_day"] = QDate::currentDate().toString(Qt::ISODate);
+}
 void Card::grade(bool correct, const QString &response) {
   if (resolved)
     return;
@@ -825,9 +883,7 @@ void Card::grade(bool correct, const QString &response) {
   challenge.event["submitted_answer"] = response;
   challenge.event["normalized_answer"] =
       challenge.reading ? toKana(response) : normalizeMeaning(response);
-  challenge.event["graded_at"] =
-      QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-  challenge.event["graded_local_day"] = QDate::currentDate().toString(Qt::ISODate);
+  stampGrade();
   resolved = true;
   result = correct ? 1 : 0;
   input->setEnabled(false);
@@ -839,6 +895,8 @@ void Card::grade(bool correct, const QString &response) {
   check->hide();
   choiceArea->hide();
   showAnswer();
+  if (!correct)
+    showMemoryHelp();
   applyTheme(themeIndex);
   feedback->show();
   done->show();
@@ -905,11 +963,8 @@ void Card::finish(bool endSession) {
   }
   pending = false;
   challenge.event["end_session"] = endSession;
-  if (result >= 0 && !challenge.event.contains("graded_at")) {
-    challenge.event["graded_at"] =
-        QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-    challenge.event["graded_local_day"] = QDate::currentDate().toString(Qt::ISODate);
-  }
+  if (result >= 0 && !challenge.event.contains("graded_at"))
+    stampGrade();
   if (!challenge.event.contains("example_opened"))
     challenge.event["example_opened"] = false;
   if (!resolved && !input->text().isEmpty())

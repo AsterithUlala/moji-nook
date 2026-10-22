@@ -517,6 +517,9 @@ void App::buildDashboard() {
   practiceToggle("Second try for near-miss spelling", "nearMissRetry",
                  "practice/near_miss_retry", true,
                  "One kana off → one more try before grading.");
+  practiceToggle("Show memory help after a miss", "missDetails",
+                 "practice/miss_details", false,
+                 "Similar-looking kanji and the WaniKani mnemonic.");
   recallPercent = new ScrollSafeSlider;
   typedPercent = new ScrollSafeSlider;
   recallPercent->setObjectName("recallShare");
