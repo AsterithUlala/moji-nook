@@ -7,6 +7,7 @@
 #include "sync.h"
 #include "speech.h"
 #include "progression_popup.h"
+#include "quiet_hours.h"
 #include "theme.h"
 #include <QtWidgets>
 
@@ -21,15 +22,24 @@ public:
   int intervalMs = 300000;
   int sessionSize = 2, sessionTotal = 2, position = 1;
   QString sessionId;
-  bool pending = false, paused = false;
+  // Pause is the learner's choice and quiet follows quietHours; either one
+  // holds scheduled sessions without touching the other.
+  bool pending = false, paused = false, quiet = false;
   // The running timer is a snooze, not the regular interval.
   bool snoozed = false;
+  QuietSchedule quietHours;
   void request();
+  void offer();
   void complete();
   void advance();
   void setPaused(bool value);
+  void refreshQuiet();
 signals:
   void due();
+  void quietChanged(bool quiet);
+
+private:
+  void startInterval();
 };
 
 class Card : public QWidget {
@@ -46,6 +56,7 @@ public:
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
   void setProgressTile(const std::optional<ProgressTile> &tile);
+  bool isEngaged() const { return engaged; }
   Challenge challenge;
 signals:
   void completed(Challenge challenge, int outcome, qint64 activeMs);
@@ -100,7 +111,7 @@ class App : public QObject {
   Q_OBJECT
 public:
   App(Store &store, const QString &dataDir, QObject *parent = nullptr);
-  void start(bool demo, bool trayOnly);
+  void start(bool demo, bool trayOnly, const QStringList &loginArgs = {});
   void showDashboard();
   bool savePreview(const QString &directory);
   bool saveAnkiPreview(const QString &directory);
@@ -164,6 +175,8 @@ private:
   QTimer statsRefresh;
   QVector<bool> dirtyTabs = QVector<bool>(6, true);
   bool demoMode = false;
+  // Extra arguments for login startup, such as an explicit --data-dir.
+  QStringList loginArgs;
   QString readToken() const;
   bool saveToken(const QString &token);
   void refreshPool();
@@ -223,29 +236,29 @@ protected:
     painter.drawPath(chevron);
   }
 };
-class ScrollSafeSpinBox : public QSpinBox {
+template <class Stepper> class ScrollSafeStepper : public Stepper {
 public:
-  explicit ScrollSafeSpinBox(QWidget *parent = nullptr) : QSpinBox(parent) {
+  explicit ScrollSafeStepper(QWidget *parent = nullptr) : Stepper(parent) {
     // Style sheet padding does not reach the inner editor; inset the text
     // to line up with the neighboring combo boxes.
-    lineEdit()->setTextMargins(7, 0, 0, 0);
+    this->lineEdit()->setTextMargins(7, 0, 0, 0);
   }
 
 protected:
   void wheelEvent(QWheelEvent *event) override { event->ignore(); }
   void paintEvent(QPaintEvent *event) override {
-    QSpinBox::paintEvent(event);
+    Stepper::paintEvent(event);
     QStyleOptionSpinBox option;
-    initStyleOption(&option);
-    const QRect up = style()->subControlRect(
+    this->initStyleOption(&option);
+    const QRect up = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, this);
-    const QRect down = style()->subControlRect(
+    const QRect down = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxDown, this);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QColor color = isEnabled()
-        ? palette().color(QPalette::Text)
-        : palette().color(QPalette::Disabled, QPalette::Text);
+    const QColor color = this->isEnabled()
+        ? this->palette().color(QPalette::Text)
+        : this->palette().color(QPalette::Disabled, QPalette::Text);
     painter.setPen(QPen(color, 1.5, Qt::SolidLine, Qt::RoundCap,
                          Qt::RoundJoin));
     auto chevron = [&painter](const QRect &button, bool upward) {
@@ -263,6 +276,8 @@ protected:
     chevron(down, false);
   }
 };
+using ScrollSafeSpinBox = ScrollSafeStepper<QSpinBox>;
+using ScrollSafeTimeEdit = ScrollSafeStepper<QTimeEdit>;
 
 QVector<Subject> demoSubjects();
 QString appStyle(int theme = defaultTheme);
@@ -270,5 +285,6 @@ QIcon appIcon();
 QIcon brandMark(int theme = defaultTheme);
 QString syncAgeText(const QDateTime &last,
                     const QDateTime &now = QDateTime::currentDateTimeUtc());
+QString quietHoursText(const QuietSchedule &schedule, const QDateTime &now);
 bool automaticSyncDue(const QDateTime &lastSuccess,
                       const QDateTime &lastAttempt, const QDateTime &now);

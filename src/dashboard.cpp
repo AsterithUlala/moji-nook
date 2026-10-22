@@ -1,3 +1,4 @@
+#include "autostart.h"
 #include "style.h"
 #include "theme.h"
 #include "ui.h"
@@ -20,6 +21,70 @@ public:
     }
     grid->addWidget(panels[selected], 0, 0, Qt::AlignTop);
     grid->setColumnStretch(0, 1);
+  }
+};
+class QuietHoursRow : public QFrame {
+public:
+  QList<QPushButton *> days;
+  ScrollSafeTimeEdit *from = new ScrollSafeTimeEdit, *to = new ScrollSafeTimeEdit;
+  QLabel *hint = label({}, "muted");
+  QPushButton *remove = button("Remove", "quiet");
+  explicit QuietHoursRow(const QuietWindow &window) {
+    setObjectName("quietHoursRow");
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    auto *dayRow = new QHBoxLayout;
+    dayRow->setSpacing(4);
+    for (int i = 0; i < 7; ++i) {
+      const QString name = QLocale(QLocale::English).dayName(i + 1);
+      auto *day = button(name.left(1), "day");
+      day->setCheckable(true);
+      day->setChecked(window.days >> i & 1);
+      day->setAccessibleName(name);
+      day->setToolTip(name);
+      day->setFixedSize(34, 34);
+      days << day;
+      dayRow->addWidget(day);
+      connect(day, &QPushButton::toggled, this, [this] { refreshHint(); });
+    }
+    dayRow->addStretch();
+    layout->addLayout(dayRow);
+    auto *times = new QHBoxLayout;
+    times->setSpacing(8);
+    for (auto [edit, caption, name, time] :
+         {std::tuple{from, "From", "Quiet hours start", window.start},
+          std::tuple{to, "To", "Quiet hours end", window.end}}) {
+      auto *text = label(caption, "muted");
+      text->setWordWrap(false);
+      text->setBuddy(edit);
+      edit->setAccessibleName(name);
+      edit->setTime(time);
+      times->addWidget(text);
+      times->addWidget(edit);
+      connect(edit, &QTimeEdit::timeChanged, this, [this] { refreshHint(); });
+    }
+    times->addWidget(hint, 1);
+    remove->setAccessibleName("Remove quiet hours");
+    times->addWidget(remove);
+    layout->addLayout(times);
+    refreshHint();
+  }
+  QuietWindow window() const {
+    QuietWindow result{0, from->time(), to->time()};
+    for (int i = 0; i < days.size(); ++i)
+      if (days[i]->isChecked())
+        result.days |= 1 << i;
+    return result;
+  }
+
+private:
+  void refreshHint() {
+    const auto w = window();
+    hint->setText(!w.days ? "Choose at least one day"
+                  : w.start == w.end ? "Choose different times"
+                  : w.end < w.start ? "Ends the next day"
+                                    : QString());
   }
 };
 void App::buildDashboard() {
@@ -244,6 +309,24 @@ void App::buildDashboard() {
   form->addWidget(scheduleDivider);
   auto *scheduleHeading = label("Schedule", "controlHeading");
   form->addWidget(scheduleHeading);
+  auto *startAtLogin = new SettingsCheckBox("Start Moji Nook when you log in");
+  startAtLogin->setObjectName("startAtLogin");
+  startAtLogin->setChecked(Autostart::enabled());
+  form->addWidget(startAtLogin);
+  auto *loginStatus = label({}, "startAtLoginStatus");
+  loginStatus->setAccessibleName("Login startup status");
+  loginStatus->hide();
+  form->addWidget(loginStatus);
+  connect(startAtLogin, &QCheckBox::toggled, this, [this, startAtLogin, loginStatus](bool on) {
+    QString error;
+    const bool ok = Autostart::setEnabled(on, loginArgs, &error);
+    loginStatus->setText(ok ? QString() : "Could not change login startup · " + error);
+    loginStatus->setVisible(!ok);
+    if (!ok) {
+      const QSignalBlocker blocker(startAtLogin);
+      startAtLogin->setChecked(Autostart::enabled());
+    }
+  });
   auto *intervalLabel = label("Minutes between sessions", "muted");
   form->addWidget(intervalLabel);
   interval = new ScrollSafeSpinBox;
@@ -286,6 +369,51 @@ void App::buildDashboard() {
     snoozeMinutes = n;
     settings.setValue("snooze_minutes", n);
     refreshSnoozeLabels();
+  });
+  form->addSpacing(8);
+  form->addWidget(label("Quiet hours"));
+  form->addWidget(label("No cards appear during these times. Practice now still works.", "muted"));
+  auto *quietRows = new QVBoxLayout;
+  quietRows->setSpacing(16);
+  form->addLayout(quietRows);
+  auto *addQuiet = button("Add quiet hours", "control");
+  addQuiet->setObjectName("addQuietHours");
+  form->addWidget(addQuiet, 0, Qt::AlignLeft);
+  auto saveQuiet = [this, quietRows] {
+    QuietSchedule schedule;
+    for (int i = 0; i < quietRows->count(); ++i)
+      schedule.windows << static_cast<QuietHoursRow *>(quietRows->itemAt(i)->widget())->window();
+    settings.setValue("practice/quiet_hours", schedule.serialize());
+    clock.quietHours = schedule;
+    clock.refreshQuiet();
+  };
+  auto addQuietRow = [this, quietRows, addQuiet, saveQuiet](const QuietWindow &window) {
+    auto *row = new QuietHoursRow(window);
+    // New widgets join the end of the focus chain; keep the row before Add.
+    QWidget *previous = addQuiet->previousInFocusChain();
+    quietRows->addWidget(row);
+    for (QWidget *next : QList<QWidget *>(row->days.cbegin(), row->days.cend()) +
+                             QList<QWidget *>{row->from, row->to, row->remove, addQuiet}) {
+      QWidget::setTabOrder(previous, next);
+      previous = next;
+    }
+    for (auto *day : row->days)
+      connect(day, &QPushButton::toggled, this, saveQuiet);
+    connect(row->from, &QTimeEdit::timeChanged, this, saveQuiet);
+    connect(row->to, &QTimeEdit::timeChanged, this, saveQuiet);
+    connect(row->remove, &QPushButton::clicked, this, [quietRows, row, saveQuiet] {
+      quietRows->removeWidget(row);
+      row->hide();
+      row->deleteLater();
+      saveQuiet();
+    });
+    return row;
+  };
+  for (const auto &window : clock.quietHours.windows)
+    addQuietRow(window);
+  connect(addQuiet, &QPushButton::clicked, this, [addQuietRow, saveQuiet] {
+    addQuietRow({0x1f, QTime(9, 0), QTime(17, 0)})->days.first()->setFocus(Qt::TabFocusReason);
+    saveQuiet();
   });
   auto *placement = new QFrame;
   placement->setObjectName("placementSettings");

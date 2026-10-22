@@ -88,7 +88,7 @@ QString appStyle(int theme) {
         QWidget#settingsBody QCheckBox { background:transparent; font-size:14px; spacing:8px; }
         QWidget#settingsBody QCheckBox::indicator { width:18px; height:18px; border:1px solid #536e5c; border-radius:3px; }
         QWidget#settingsBody QCheckBox::indicator:checked { background:#395744; }
-        QWidget#settingsBody QSpinBox, QWidget#settingsBody QComboBox { font-size:14px; }
+        QWidget#settingsBody QAbstractSpinBox, QWidget#settingsBody QComboBox { font-size:14px; }
         QLabel { background:transparent; }
         QLabel#eyebrow { color:#e8b28d; font-size:12px; font-weight:600; }
         QLabel#word { font-family:'Noto Sans CJK JP'; font-size:58px; font-weight:500; }
@@ -112,23 +112,23 @@ QString appStyle(int theme) {
         QLabel#cardHint { color:#a9bcb0; font-size:12px; }
         QGroupBox { background:transparent; border:0; border-radius:0; margin-top:24px; padding:20px 8px 16px; font-weight:600; }
         QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0; }
-        QPushButton:focus, QComboBox:focus, QSpinBox:focus { border:2px solid #b5dfbd; }
+        QPushButton:focus, QComboBox:focus, QAbstractSpinBox:focus { border:2px solid #b5dfbd; }
         QLabel#readingChoice { font-family:'Noto Sans CJK JP'; font-size:28px; font-weight:500; }
         QLabel#meaningChoice { font-size:16px; }
         QLineEdit#readingInput { font-family:'Noto Sans CJK JP'; font-size:24px; }
         QLabel#kanaPreview { font-family:'Noto Sans CJK JP'; font-size:26px; }
-        QLineEdit, QSpinBox, QComboBox { padding:8px; background:#20342a; border:1px solid #536e5c; border-radius:6px; selection-background-color:#4b755b; }
+        QLineEdit, QAbstractSpinBox, QComboBox { padding:8px; background:#20342a; border:1px solid #536e5c; border-radius:6px; selection-background-color:#4b755b; }
         QComboBox { padding-right:36px; }
         QComboBox::drop-down { subcontrol-origin:padding; subcontrol-position:top right; width:30px; border:0; background:transparent; }
         QComboBox::down-arrow { image:none; width:0; height:0; }
-        QSpinBox { padding-right:38px; }
-        QSpinBox::up-button, QSpinBox::down-button { subcontrol-origin:border; width:20px; border:0; background:transparent; }
-        QSpinBox::up-button { subcontrol-position:top right; }
-        QSpinBox::down-button { subcontrol-position:bottom right; }
-        QSpinBox::up-arrow, QSpinBox::down-arrow { image:none; width:0; height:0; }
-        QComboBox:hover, QSpinBox:hover { border-color:#93b69c; }
-        QComboBox:focus, QSpinBox:focus { border:2px solid #b5dfbd; }
-        QComboBox:disabled, QSpinBox:disabled { color:#819388; background:#20342a; border-color:#395744; }
+        QAbstractSpinBox { padding-right:38px; }
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin:border; width:20px; border:0; background:transparent; }
+        QAbstractSpinBox::up-button { subcontrol-position:top right; }
+        QAbstractSpinBox::down-button { subcontrol-position:bottom right; }
+        QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow { image:none; width:0; height:0; }
+        QComboBox:hover, QAbstractSpinBox:hover { border-color:#93b69c; }
+        QComboBox:focus, QAbstractSpinBox:focus { border:2px solid #b5dfbd; }
+        QComboBox:disabled, QAbstractSpinBox:disabled { color:#819388; background:#20342a; border-color:#395744; }
         QSlider { min-height:32px; background:transparent; }
         QSlider::groove:horizontal { height:8px; background:#20342a; border:1px solid #536e5c; border-radius:4px; }
         QSlider::sub-page:horizontal { background:#b1d9b8; border:0; border-radius:3px; margin:1px; }
@@ -164,7 +164,7 @@ QString appStyle(int theme) {
   css = recolor(css, theme);
   css += QString("QPushButton[role=\"primary\"] { color:%1; background:%2; "
                  "border-color:%2; } "
-                 "QLineEdit,QComboBox,QSpinBox,QTextBrowser { "
+                 "QLineEdit,QComboBox,QAbstractSpinBox,QTextBrowser { "
                  "selection-color:%1; selection-background-color:%2; }")
              .arg(colors(theme).actionInk, colors(theme).action);
   const QColor accent(colors(theme).action);
@@ -229,6 +229,7 @@ QString appStyle(int theme) {
     QPushButton[role="section"]:hover { background:$surface; color:$text; }
     QPushButton[role="section"]:checked { background:$surface; color:$action; border-bottom:2px solid $action; font-weight:600; }
     QPushButton[role="section"]:focus { border:2px solid $action; padding:9px 12px 11px; }
+    QLabel#startAtLoginStatus { color:$negative; font-size:13px; }
     QLabel#practiceSourceWarning { color:$text; background:$surface; padding:12px; border:1px solid $warm; border-radius:8px; }
     QFrame#wordStage { background:$poster; border:0; border-radius:12px; }
     QFrame#wordStage QLabel#word { color:$posterInk; background:transparent; }
@@ -305,6 +306,10 @@ QString appStyle(int theme) {
     QPushButton#cardBrand:pressed, QPushButton#dismiss:pressed { background:$pressedWash; }
     QListWidget { border:1px solid $border; border-radius:8px; padding:8px; }
     QLabel#homeWordsEmpty { background:rgba($emptyRed,$emptyGreen,$emptyBlue,26); border-radius:8px; }
+    QPushButton[role="day"] { padding:0; border-radius:6px; }
+    QPushButton[role="day"]:checked { background:$actionWash; color:$actionInk; border-color:$action; font-weight:600; }
+    QPushButton[role="day"]:checked:hover { background:$actionHoverWash; }
+    QPushButton[role="day"]:focus { border:2px solid $text; }
   )").replace("$surfaceWash", gradient(QColor(c.surface)))
       .replace("$hoverWash", gradient(QColor(c.hover)))
       .replace("$pressedWash", gradient(QColor(c.surface).darker(110)))

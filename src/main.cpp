@@ -139,6 +139,9 @@ int main(int argc, char **argv) {
     return app.saveAnkiPreview(parser.value("anki-preview")) ? 0 : 1;
   if (parser.isSet("preview"))
     return app.savePreview(parser.value("preview")) ? 0 : 1;
-  app.start(parser.isSet("demo"), parser.isSet("tray"));
+  QStringList loginArgs;
+  if (parser.isSet("data-dir"))
+    loginArgs << "--data-dir" << QFileInfo(data).absoluteFilePath();
+  app.start(parser.isSet("demo"), parser.isSet("tray"), loginArgs);
   return application.exec();
 }

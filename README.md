@@ -45,6 +45,8 @@ Nook itself waits in the system tray.*
 - **Easy to put aside:** dismiss a session, pause reminders, or snooze for
   your chosen time (30 minutes by default). Busy time never builds a backlog,
   and a dismissed card is not counted as a wrong answer.
+- **Quiet hours:** choose days and times with no cards, such as work hours or
+  overnight. **Practice now** still works.
 - **On demand:** start a session any time from the system tray.
 
 Moji Nook runs in the system tray. Closing the dashboard leaves it running; use
