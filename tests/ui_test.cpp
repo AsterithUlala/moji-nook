@@ -1742,7 +1742,7 @@ private slots:
     Store store(directory.path());
     auto empty = loadChartData(store);
     QCOMPARE(empty.days.size(), 28);
-    QCOMPARE(empty.mix, QVector<int>({0, 0, 0, 0, 0}));
+    QCOMPARE(empty.mix, QVector<int>({0, 0, 0, 0, 0, 0}));
     Challenge c;
     c.subject = demoSubjects().first();
     c.mode = Mode::Typing;
@@ -1763,17 +1763,20 @@ private slots:
     QCOMPARE(data.days.last().readingTotal, 1);
     QCOMPARE(data.days.last().readingCorrect, 0);
     QCOMPARE(data.days.last().meaningCorrect, 1);
-    QCOMPARE(data.mix, QVector<int>({3, 0, 1, 0, 0}));
+    QCOMPARE(data.mix, QVector<int>({3, 0, 1, 0, 0, 0}));
     QCOMPARE(data.formatTotal, QVector<int>({1, 2, 1}));
     QCOMPARE(data.formatCorrect, QVector<int>({1, 1, 1}));
     QCOMPARE(std::accumulate(data.hourTotal.begin(), data.hourTotal.end(), 0),
              4);
     QSqlQuery legacy(store.db);
     QVERIFY(legacy.exec("UPDATE attempts SET event_json=NULL WHERE id=3"));
-    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 0}));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 0, 0}));
     c.selectionReason = "Newest 30";
     QVERIFY(store.record(c, true, 100));
-    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1}));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1, 0}));
+    c.selectionReason = "Burned review";
+    QVERIFY(store.record(c, true, 100));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1, 1}));
     InsightsBrowser browser;
     browser.resize(760, 700);
     browser.show();
