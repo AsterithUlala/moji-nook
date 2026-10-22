@@ -1,5 +1,4 @@
 #include "core.h"
-#include <cmath>
 Store::Store(const QString &path) : directory(path) {
   if (!QDir().mkpath(path)) {
     error = "Could not create the data directory.";
@@ -118,22 +117,6 @@ bool Store::record(const Challenge &c, std::optional<bool> correct,
     return false;
   }
   return true;
-}
-QHash<int, double> Store::missBoosts() const {
-  QHash<int, double> result;
-  QSqlQuery q(db);
-  q.exec(
-      "SELECT subject_id,correct,created_at FROM attempts WHERE id IN (SELECT "
-      "MAX(id) FROM attempts WHERE correct IS NOT NULL GROUP BY subject_id)");
-  while (q.next())
-    if (q.value(1).toInt() == 0) {
-      double days =
-          QDateTime::fromString(q.value(2).toString(), Qt::ISODateWithMs)
-              .secsTo(QDateTime::currentDateTimeUtc()) /
-          86400.0;
-      result[q.value(0).toInt()] = 1 + std::exp(-qMax(0.0, days) / 3.0);
-    }
-  return result;
 }
 QList<int> Store::recentSubjects() const {
   QList<int> ids;

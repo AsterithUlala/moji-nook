@@ -94,9 +94,8 @@ QStringList Picker::distractors(const Subject &s, bool reading,
   return out;
 }
 
-Challenge Picker::next(const QVector<Subject> &pool,
-                       const QHash<int, double> &boosts,
-                       const QList<int> &recent, const Evidence &evidence,
+Challenge Picker::next(const QVector<Subject> &pool, const QList<int> &recent,
+                       const Evidence &evidence,
                        int recentShare, int persistentShare, int recallShare,
                        int typedShare, const QVector<double> &masteryWeights,
                        int newestShare) {
@@ -120,13 +119,13 @@ Challenge Picker::next(const QVector<Subject> &pool,
   };
   for (const auto &s : pool)
     if (!excluded.contains(s.id))
-      total += weight(s.stage) * boosts.value(s.id, 1);
+      total += weight(s.stage);
   double roll = random.generateDouble() * total;
   Challenge c;
   for (const auto &s : pool)
     if (!excluded.contains(s.id)) {
       c.subject = s;
-      roll -= weight(s.stage) * boosts.value(s.id, 1);
+      roll -= weight(s.stage);
       if (roll < 0)
         break;
     }

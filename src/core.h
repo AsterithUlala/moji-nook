@@ -62,7 +62,6 @@ public:
   bool saveCache(const QJsonObject &value);
   bool record(const Challenge &challenge, std::optional<bool> correct,
               qint64 activeMs);
-  QHash<int, double> missBoosts() const;
   QList<int> recentSubjects() const;
   QString statsHtml(const QVector<Subject> &pool, bool detailed = false) const;
   bool exportCsv(const QString &path) const;
@@ -76,8 +75,8 @@ class Picker {
 public:
   explicit Picker(quint32 seed = QRandomGenerator::global()->generate())
       : random(seed) {}
-  Challenge next(const QVector<Subject> &pool, const QHash<int, double> &boosts,
-                 const QList<int> &recent, const Evidence &evidence = {},
+  Challenge next(const QVector<Subject> &pool, const QList<int> &recent,
+                 const Evidence &evidence = {},
                  int recentShare = 40, int persistentShare = 20,
                  int recallShare = 50, int typedShare = 25,
                  const QVector<double> &masteryWeights = {},

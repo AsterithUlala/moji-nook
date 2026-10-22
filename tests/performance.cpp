@@ -41,13 +41,13 @@ int main(int argc, char **argv) {
   const auto recent = store.recentSubjects();
   Challenge challenge;
   measure("pick_recall", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 100, 0, {}, 30);
+    challenge = picker.next(pool, recent, evidence, 25, 20, 100, 0, {}, 30);
   });
   measure("pick_typed", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 0, 100, {}, 30);
+    challenge = picker.next(pool, recent, evidence, 25, 20, 0, 100, {}, 30);
   });
   measure("pick_choice", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 0, 0, {}, 30);
+    challenge = picker.next(pool, recent, evidence, 25, 20, 0, 0, {}, 30);
   });
   measure("record", [&] { store.record(challenge, true, 100); });
   measure("overview", [&] { store.statsHtml(pool); });

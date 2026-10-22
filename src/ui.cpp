@@ -510,7 +510,7 @@ void App::showCard() {
     evidence[it.key()].persistent += it->persistent;
   }
   auto challenge =
-      picker.next(useAnki ? ankiPool : wkPool, {}, store.recentSubjects(),
+      picker.next(useAnki ? ankiPool : wkPool, store.recentSubjects(),
                   evidence, recentPercent->value(), persistentPercent->value(),
                   recallPercent->value(), typedPercent->value(), weights,
                   newestPercent->value());

@@ -119,7 +119,7 @@ private slots:
     Picker picker(78);
     int recent = 0, persistent = 0, broad = 0;
     for (int i = 0; i < 6000; ++i) {
-      auto c = picker.next(pool, {}, {}, evidence);
+      auto c = picker.next(pool, {}, evidence);
       if (c.selectionReason == "Recent struggles") {
         ++recent;
         QCOMPARE(c.subject.id, 1);
@@ -137,7 +137,7 @@ private slots:
     QVERIFY(persistent > 750 && persistent < 1050);
     QVERIFY(broad > 2500);
     for (int i = 0; i < 100; ++i) {
-      auto c = picker.next(pool, {}, {1}, evidence, 100, 0);
+      auto c = picker.next(pool, {1}, evidence, 100, 0);
       QCOMPARE(c.selectionReason, QString("Broad recall"));
       QVERIFY(c.subject.id != 1);
     }
@@ -256,22 +256,22 @@ private slots:
     Picker picker(17);
     int recent = 0;
     for (int i = 0; i < 9000; ++i)
-      if (picker.next({a, b}, {}, {}).subject.id == 1)
+      if (picker.next({a, b}, {}).subject.id == 1)
         ++recent;
     QVERIFY(recent > 7700 && recent < 8300);
     for (int i = 0; i < 30; ++i)
-      QCOMPARE(picker.next({a, b}, {}, {1}).subject.id, 2);
-    QCOMPARE(picker.next({a}, {}, {1}).subject.id, 1);
+      QCOMPARE(picker.next({a, b}, {1}).subject.id, 2);
+    QCOMPARE(picker.next({a}, {1}).subject.id, 1);
     int burned = 0;
     for (int i = 0; i < 2000; ++i) {
-      auto c = picker.next({a, b}, {}, {}, {}, 0, 0, 100, 0, {.1, 3, 2, 1, 10});
+      auto c = picker.next({a, b}, {}, {}, 0, 0, 100, 0, {.1, 3, 2, 1, 10});
       QCOMPARE(c.mode, Mode::Recall);
       burned += c.subject.id == 2;
     }
     QVERIFY(burned > 1950);
     a.readings = {"いち"};
     for (int i = 0; i < 30; ++i)
-      QCOMPARE(picker.next({a}, {}, {}, {}, 0, 0, 0, 100).mode, Mode::Typing);
+      QCOMPARE(picker.next({a}, {}, {}, 0, 0, 0, 100).mode, Mode::Typing);
   }
   void newestLearnedSelection() {
     QVector<Subject> pool;
@@ -291,7 +291,7 @@ private slots:
     Picker picker(79);
     QSet<int> selected;
     for (int i = 0; i < 1000; ++i) {
-      auto c = picker.next(pool, {}, {40}, {}, 0, 0, 0, 100, {}, 100);
+      auto c = picker.next(pool, {40}, {}, 0, 0, 0, 100, {}, 100);
       QCOMPARE(c.selectionReason, QString("Newest 30"));
       QCOMPARE(c.mode, Mode::Typing);
       QVERIFY(c.subject.id >= 11 && c.subject.id < 40);
@@ -300,7 +300,7 @@ private slots:
     QCOMPARE(selected.size(), 29);
     QHash<QString, int> counts;
     for (int i = 0; i < 10000; ++i)
-      ++counts[picker.next(pool, {}, {}, evidence, 25, 20, 50, 25, {}, 30)
+      ++counts[picker.next(pool, {}, evidence, 25, 20, 50, 25, {}, 30)
                    .selectionReason];
     QVERIFY(qAbs(counts["Newest 30"] - 3000) < 200);
     QVERIFY(qAbs(counts["Recent struggles"] - 2500) < 200);
@@ -308,11 +308,11 @@ private slots:
     QVERIFY(qAbs(counts["Broad recall"] - 2500) < 200);
     auto s = pool.first();
     QCOMPARE(
-        picker.next({s}, {}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
+        picker.next({s}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
         QString("Newest 30"));
     s.startedAt = {};
     QCOMPARE(
-        picker.next({s}, {}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
+        picker.next({s}, {}, {}, 0, 0, 100, 0, {}, 100).selectionReason,
         QString("Broad recall"));
   }
   void choiceAmbiguityAndModeMix() {
@@ -336,7 +336,7 @@ private slots:
     Picker picker(44);
     int modes[3] = {};
     for (int i = 0; i < 4000; ++i) {
-      auto c = picker.next(pool, {}, {});
+      auto c = picker.next(pool, {});
       ++modes[int(c.mode)];
       if (c.mode == Mode::Choice) {
         QCOMPARE(c.choices.size(), 4);
@@ -369,11 +369,8 @@ private slots:
       Store store(dir.path());
       QVERIFY(store.ready());
       QVERIFY(store.record(c, std::nullopt, 0));
-      QVERIFY(store.missBoosts().isEmpty());
       QVERIFY(store.record(c, false, 100));
-      QVERIFY(store.missBoosts().value(1) > 1.9);
       QVERIFY(store.record(c, true, 100));
-      QVERIFY(store.missBoosts().isEmpty());
       QVERIFY(store.exportCsv(dir.path() + "/export.csv"));
       auto html = store.statsHtml({c.subject});
       QVERIFY(html.contains("Last 24 hours"));
