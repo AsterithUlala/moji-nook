@@ -229,6 +229,7 @@ QString appStyle(int theme) {
     QPushButton[role="section"]:hover { background:$surface; color:$text; }
     QPushButton[role="section"]:checked { background:$surface; color:$action; border-bottom:2px solid $action; font-weight:600; }
     QPushButton[role="section"]:focus { border:2px solid $action; padding:9px 12px 11px; }
+    QLabel#startAtLoginStatus { color:$negative; font-size:13px; }
     QLabel#practiceSourceWarning { color:$text; background:$surface; padding:12px; border:1px solid $warm; border-radius:8px; }
     QFrame#wordStage { background:$poster; border:0; border-radius:12px; }
     QFrame#wordStage QLabel#word { color:$posterInk; background:transparent; }

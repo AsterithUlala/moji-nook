@@ -232,6 +232,9 @@ bool App::savePreview(const QString &path) {
   heartbeat.stop();
   autoSync.stop();
   demoMode = true;
+  auto *startAtLogin = dashboard.findChild<QCheckBox *>("startAtLogin");
+  const bool savedStartAtLogin = !startAtLogin->isHidden();
+  startAtLogin->hide();
   card.setReducedMotion(true);
   recap.setReducedMotion(true);
   previewCard.setReducedMotion(true);
@@ -613,6 +616,7 @@ bool App::savePreview(const QString &path) {
   ok = settings.status() == QSettings::NoError && ok;
   applyFeedbackSettings();
   demoMode = savedDemoMode;
+  startAtLogin->setVisible(savedStartAtLogin);
   if (savedVisible)
     dashboard.show();
   if (savedHeartbeat)

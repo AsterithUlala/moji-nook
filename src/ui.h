@@ -111,7 +111,7 @@ class App : public QObject {
   Q_OBJECT
 public:
   App(Store &store, const QString &dataDir, QObject *parent = nullptr);
-  void start(bool demo, bool trayOnly);
+  void start(bool demo, bool trayOnly, const QStringList &loginArgs = {});
   void showDashboard();
   bool savePreview(const QString &directory);
   bool saveAnkiPreview(const QString &directory);
@@ -175,6 +175,8 @@ private:
   QTimer statsRefresh;
   QVector<bool> dirtyTabs = QVector<bool>(6, true);
   bool demoMode = false;
+  // Extra arguments for login startup, such as an explicit --data-dir.
+  QStringList loginArgs;
   QString readToken() const;
   bool saveToken(const QString &token);
   void refreshPool();

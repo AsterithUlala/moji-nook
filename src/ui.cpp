@@ -582,8 +582,11 @@ void App::showDashboard() {
   dashboard.raise();
   dashboard.activateWindow();
 }
-void App::start(bool demo, bool trayOnly) {
+void App::start(bool demo, bool trayOnly, const QStringList &loginArgs) {
   demoMode = demo;
+  this->loginArgs = loginArgs;
+  // Demo mode never changes the desktop session.
+  dashboard.findChild<QCheckBox *>("startAtLogin")->setVisible(!demo);
   refreshPool();
   if (!demo && pool.isEmpty())
     tabs->setCurrentWidget(settingsPage);

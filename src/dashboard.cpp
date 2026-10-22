@@ -1,3 +1,4 @@
+#include "autostart.h"
 #include "style.h"
 #include "theme.h"
 #include "ui.h"
@@ -308,6 +309,24 @@ void App::buildDashboard() {
   form->addWidget(scheduleDivider);
   auto *scheduleHeading = label("Schedule", "controlHeading");
   form->addWidget(scheduleHeading);
+  auto *startAtLogin = new SettingsCheckBox("Start Moji Nook when you log in");
+  startAtLogin->setObjectName("startAtLogin");
+  startAtLogin->setChecked(Autostart::enabled());
+  form->addWidget(startAtLogin);
+  auto *loginStatus = label({}, "startAtLoginStatus");
+  loginStatus->setAccessibleName("Login startup status");
+  loginStatus->hide();
+  form->addWidget(loginStatus);
+  connect(startAtLogin, &QCheckBox::toggled, this, [this, startAtLogin, loginStatus](bool on) {
+    QString error;
+    const bool ok = Autostart::setEnabled(on, loginArgs, &error);
+    loginStatus->setText(ok ? QString() : "Could not change login startup · " + error);
+    loginStatus->setVisible(!ok);
+    if (!ok) {
+      const QSignalBlocker blocker(startAtLogin);
+      startAtLogin->setChecked(Autostart::enabled());
+    }
+  });
   auto *intervalLabel = label("Minutes between sessions", "muted");
   form->addWidget(intervalLabel);
   interval = new ScrollSafeSpinBox;

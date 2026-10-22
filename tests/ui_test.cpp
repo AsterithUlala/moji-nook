@@ -2165,6 +2165,69 @@ private slots:
     QTest::keyClick(QApplication::focusWidget(), Qt::Key_Space);
     QCOMPARE(QApplication::focusWidget(), add);
   }
+  void startAtLoginToggleWritesTheAutostartEntry() {
+    QTemporaryDir config, dir;
+    const auto savedConfig = qgetenv("XDG_CONFIG_HOME");
+    const auto savedAppImage = qgetenv("APPIMAGE");
+    const auto restore = qScopeGuard([&] {
+      for (auto [name, value] : {std::pair{"XDG_CONFIG_HOME", savedConfig},
+                                 std::pair{"APPIMAGE", savedAppImage}})
+        value.isNull() ? qunsetenv(name) : qputenv(name, value);
+    });
+    qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+    qunsetenv("APPIMAGE");
+    const QString entry = config.path() + "/autostart/moji-nook.desktop";
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(false, true, {"--data-dir", dir.path() + "/My Nook"});
+    app.showSettings();
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    auto *login = dashboard->findChild<QCheckBox *>("startAtLogin");
+    auto *status = dashboard->findChild<QLabel *>("startAtLoginStatus");
+    QVERIFY(login && status);
+    QCOMPARE(login->text(), QString("Start Moji Nook when you log in"));
+    QVERIFY(login->isVisible());
+    QVERIFY(!login->isChecked());
+    login->click();
+    QVERIFY(login->isChecked());
+    QFile file(entry);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(QString::fromUtf8(file.readAll()).contains(
+        "\nExec=" + QCoreApplication::applicationFilePath() + " --tray --data-dir \"" +
+        dir.path() + "/My Nook\"\n"));
+    file.close();
+    login->click();
+    QVERIFY(!QFile::exists(entry));
+    QVERIFY(status->isHidden());
+    // A failed write leaves the box unchecked and says why.
+    QVERIFY(QDir(config.path()).rmdir("autostart"));
+    QFile blocker(config.path() + "/autostart");
+    QVERIFY(blocker.open(QIODevice::WriteOnly));
+    blocker.close();
+    login->click();
+    QVERIFY(!login->isChecked());
+    QVERIFY(!status->isHidden());
+    QVERIFY(status->text().startsWith("Could not change login startup · "));
+    QVERIFY(blocker.remove());
+    login->click();
+    QVERIFY(login->isChecked());
+    QVERIFY(status->isHidden());
+    QVERIFY(QFile::exists(entry));
+    QTemporaryDir demoDir;
+    Store demoStore(demoDir.path());
+    App demo(demoStore, demoDir.path());
+    demo.start(true, true);
+    QList<QCheckBox *> demoToggles;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window != dashboard && window->findChild<QTabWidget *>("dashboardTabs"))
+        demoToggles << window->findChild<QCheckBox *>("startAtLogin");
+    QCOMPARE(demoToggles.size(), 1);
+    QVERIFY(demoToggles.first()->isHidden());
+    // The entry on disk, not settings.ini, decides the box.
+    QVERIFY(demoToggles.first()->isChecked());
+  }
   void sessionClockAndCardProgress() {
     PracticeClock clock;
     QSignalSpy due(&clock, &PracticeClock::due);

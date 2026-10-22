@@ -86,6 +86,10 @@ Session size is adjustable from one to 25. The next interval starts after
 completing or ending the session, not after revealing an answer. Busy time does
 not accumulate a backlog of cards.
 
+To open Moji Nook in the tray when you log in, turn on **Start Moji Nook when
+you log in** in **Settings → Practice → Schedule**. Turning it off removes the
+startup entry.
+
 **Quiet hours** keep cards away at times you choose, such as work hours or
 overnight. Add them in **Settings → Practice → Schedule**, then choose the days
 and a start and end time. Each window belongs to the day it starts, so Friday
