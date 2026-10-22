@@ -42,6 +42,7 @@ public:
   void applyTheme(int index);
   void setReducedMotion(bool reduced);
   void setReadingRetries(bool enabled) { readingRetries = enabled; }
+  void setNearMissRetries(bool enabled) { nearMissRetries = enabled; }
   void setAnkiAudio(bool enabled, int volume, bool autoplay = true);
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
@@ -80,7 +81,7 @@ private:
   QMetaObject::Connection screenGeometryConnection;
   CardAccent *accent;
   bool reducedMotion = true;
-  bool readingRetries = true;
+  bool readingRetries = true, nearMissRetries = true;
   QLabel *readingWarning;
   AnkiDetails *ankiDetails;
   QPointer<JapaneseSpeech> speech;

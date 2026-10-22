@@ -349,9 +349,12 @@ void App::applyFeedbackSettings() {
   card.setReducedMotion(reduced);
   previewCard.setReducedMotion(reduced);
   recap.setReducedMotion(reduced);
-  const bool retries = settings.value("reading_retry_enabled", true).toBool();
-  card.setReadingRetries(retries);
-  previewCard.setReadingRetries(retries);
+  for (Card *target : {&card, &previewCard}) {
+    target->setReadingRetries(
+        settings.value("reading_retry_enabled", true).toBool());
+    target->setNearMissRetries(
+        settings.value("practice/near_miss_retry", true).toBool());
+  }
   applySpeechSettings();
 }
 void App::snoozePractice() {

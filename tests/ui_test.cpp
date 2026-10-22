@@ -1493,6 +1493,127 @@ private slots:
     c.mode = Mode::Choice;
     QVERIFY(c.readingRetryHint("ashi").isEmpty());
   }
+  void nearMissGetsOneRetry() {
+    Card card;
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "電車";
+    c.subject.meanings = {"Train"};
+    c.subject.readings = {"でんしゃ"};
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *warning = card.findChild<QLabel *>("readingWarning");
+    auto *answer = card.findChild<QLabel *>("answer");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    const QString almost = "Almost. Check your spelling and try again.";
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    QVERIFY(warning->isVisible());
+    QCOMPARE(warning->text(), almost);
+    QVERIFY(input->isVisible() && input->isEnabled());
+    QCOMPARE(input->text(), QString("densiya"));
+    QVERIFY(!answer->isVisible());
+    input->setText("densha");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("densha"));
+
+    card.present(c, 5);
+    input->setText("でんしや");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    check->click();
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.last().first().toBool());
+    QVERIFY(!warning->isVisible());
+    QVERIFY(answer->isVisible());
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+
+    card.setNearMissRetries(false);
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 3);
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("near_miss_retry"));
+    card.setNearMissRetries(true);
+
+    c.subject.kind = "kanji";
+    c.subject.characters = "日";
+    c.subject.readings = {"にち"};
+    c.subject.readingKind = "onyomi";
+    c.subject.kanjiReadingTypes = {
+        {"にち", "onyomi"}, {"ひ", "kunyomi"}, {"にく", "kunyomi"}};
+    card.present(c, 5);
+    input->setText("niku");
+    check->click();
+    QVERIFY(warning->text().contains("on’yomi"));
+    check->click();
+    QCOMPARE(warning->text(), almost);
+    QCOMPARE(graded.count(), 3);
+    check->click();
+    QCOMPARE(graded.count(), 4);
+    QVERIFY(!graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(logged.event["reading_retries"].toArray().size(), 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+  }
+  void practiceTogglesReachCards() {
+    QTemporaryDir directory;
+    Store store(directory.path());
+    App app(store, directory.path());
+    app.showSettings();
+    QTabWidget *tabs = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *found = window->findChild<QTabWidget *>("dashboardTabs"))
+        tabs = found;
+    QVERIFY(tabs);
+    tabs->window()->findChild<QComboBox *>("previewChallengeMode")->setCurrentIndex(1);
+    Card *preview = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *card = qobject_cast<Card *>(window);
+          card && card->isVisible() && card->windowTitle().contains("Settings preview"))
+        preview = card;
+    QVERIFY(preview);
+    Challenge typed;
+    typed.subject.kind = "vocabulary";
+    typed.subject.characters = "電車";
+    typed.subject.meanings = {"Train"};
+    typed.subject.readings = {"でんしゃ"};
+    typed.mode = Mode::Typing;
+    typed.reading = true;
+    QSignalSpy graded(preview, &Card::graded);
+    auto *input = preview->findChild<QLineEdit *>("readingInput");
+    auto *check = preview->findChild<QPushButton *>("checkReading");
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    tabs->findChild<QCheckBox *>("nearMissRetry")->setChecked(false);
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    preview->close();
+  }
   void dashboardNavigationAndFeedbackSettings() {
     QTemporaryDir directory;
     Store store(directory.path());
@@ -1559,6 +1680,9 @@ private slots:
     QVERIFY(readingRetries);
     QVERIFY(readingRetries->isChecked());
     readingRetries->setChecked(false);
+    auto *nearMiss = tabs->findChild<QCheckBox *>("nearMissRetry");
+    QVERIFY(nearMiss && nearMiss->isChecked());
+    nearMiss->setChecked(false);
     sound->setChecked(false);
     QVERIFY(!volume->isEnabled());
     motion->setChecked(true);
@@ -1572,6 +1696,7 @@ private slots:
     QVERIFY(!saved.value("sound_enabled").toBool());
     QVERIFY(saved.value("reduced_motion").toBool());
     QVERIFY(!saved.value("reading_retry_enabled").toBool());
+    QCOMPARE(saved.value("practice/near_miss_retry"), QVariant(false));
     QVERIFY(!store.insightsHtml({}).contains("Little milestones"));
     QVERIFY(!store.insightsHtml({}).contains("Newest first"));
     tabs->setCurrentIndex(3);

@@ -301,6 +301,8 @@ bool App::savePreview(const QString &path) {
     card.present(c, 5);
     card.findChild<QLineEdit *>("readingInput")->setText("にちほん");
     card.findChild<QPushButton *>("checkReading")->click();
+    capture(card, QString("theme-%1-near-miss").arg(i));
+    card.findChild<QPushButton *>("checkReading")->click();
     capture(card, QString("theme-%1-missed").arg(i));
 
     Challenge choice = c;

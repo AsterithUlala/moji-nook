@@ -725,19 +725,28 @@ void Card::showAnswer() {
 void Card::grade(bool correct, const QString &response) {
   if (resolved)
     return;
-  const auto retryHint =
-      readingRetries ? challenge.readingRetryHint(response) : QString();
-  if (!correct && !retryHint.isEmpty()) {
-    auto retries = challenge.event["reading_retries"].toArray();
-    retries.append(QJsonObject{
+  // At most one retry of each kind per card; a known alternate reading wins.
+  const auto retryHint = !correct && readingRetries &&
+                                 challenge.event["reading_retries"].toArray().isEmpty()
+                             ? challenge.readingRetryHint(response)
+                             : QString();
+  const bool nearMiss = !correct && retryHint.isEmpty() && nearMissRetries &&
+                        !challenge.event["near_miss_retry"].toBool() &&
+                        challenge.nearMiss(response);
+  if (!retryHint.isEmpty()) {
+    challenge.event["reading_retries"] = QJsonArray{QJsonObject{
         {"submitted_answer", response},
         {"normalized_answer", toKana(response)},
         {"at", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-        {"hint", retryHint}});
-    challenge.event["reading_retries"] = retries;
-    readingWarning->setText(retryHint);
-    readingWarning->show();
+        {"hint", retryHint}}};
     input->selectAll();
+  }
+  if (nearMiss)
+    challenge.event["near_miss_retry"] = true;
+  if (!retryHint.isEmpty() || nearMiss) {
+    readingWarning->setText(
+        nearMiss ? "Almost. Check your spelling and try again." : retryHint);
+    readingWarning->show();
     input->setFocus(Qt::OtherFocusReason);
     fitCard();
     return;

@@ -495,17 +495,25 @@ void App::buildDashboard() {
   connect(persistentPercent, &QSlider::valueChanged, this, updateMix);
   updateMix();
   form->addWidget(label("Challenge formats", "muted"));
-  auto *readingRetries = new SettingsCheckBox("Retry alternate kanji readings");
-  readingRetries->setObjectName("readingRetriesEnabled");
-  readingRetries->setChecked(
-      settings.value("reading_retry_enabled", true).toBool());
-  form->addWidget(readingRetries);
-  form->addWidget(
-      label("Known alternate reading → retry, not a miss.", "muted"));
-  connect(readingRetries, &QCheckBox::toggled, this, [this](bool enabled) {
-    settings.setValue("reading_retry_enabled", enabled);
-    applyFeedbackSettings();
-  });
+  auto practiceToggle = [this, form](const QString &text, const QString &name,
+                                     const QString &key, bool fallback,
+                                     const QString &help) {
+    auto *toggle = new SettingsCheckBox(text);
+    toggle->setObjectName(name);
+    toggle->setChecked(settings.value(key, fallback).toBool());
+    form->addWidget(toggle);
+    form->addWidget(label(help, "muted"));
+    connect(toggle, &QCheckBox::toggled, this, [this, key](bool enabled) {
+      settings.setValue(key, enabled);
+      applyFeedbackSettings();
+    });
+  };
+  practiceToggle("Retry alternate kanji readings", "readingRetriesEnabled",
+                 "reading_retry_enabled", true,
+                 "Known alternate reading → retry, not a miss.");
+  practiceToggle("Second try for near-miss spelling", "nearMissRetry",
+                 "practice/near_miss_retry", true,
+                 "One kana off → one more try before grading.");
   recallPercent = new ScrollSafeSlider;
   typedPercent = new ScrollSafeSlider;
   recallPercent->setObjectName("recallShare");
