@@ -37,6 +37,13 @@ int main(int argc, char **argv) {
   };
   Evidence evidence;
   measure("evidence", [&] { evidence = store.evidence(); });
+  QVector<GradedAttempt> attempts;
+  measure("graded_attempts", [&] { attempts = store.gradedAttempts(); });
+  Memory memory;
+  measure("recall_memory", [&] {
+    memory = estimateMemory(pool, attempts, QDateTime::currentDateTimeUtc(),
+                            QDate::currentDate());
+  });
   Picker picker(42);
   const auto recent = store.recentSubjects();
   Challenge challenge;

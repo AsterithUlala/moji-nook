@@ -128,6 +128,17 @@ private slots:
     QCOMPARE(s->sourceData["review_count"].toInt(), 1);
     QVERIFY(s->sourceData["recent_trouble"].toDouble() > .9);
     QCOMPARE(s->startedAt.toMSecsSinceEpoch(), now - 1000);
+    QCOMPARE(s->intervalHours, 25 * 24);
+    const QJsonArray spread{
+        QJsonObject{{"id", now - 9000}, {"ease", 3}, {"type", 1}}, reviews[0],
+        QJsonObject{{"id", now - 500}, {"ease", 0}, {"type", 4}}};
+    auto spreadSubject = kaishiSubject(c, spread, -42, "Profile", {});
+    QCOMPARE(spreadSubject->startedAt.toMSecsSinceEpoch(), now - 9000);
+    QCOMPARE(spreadSubject->reviewedAt.toMSecsSinceEpoch(), now - 1000);
+    auto learning = c;
+    learning["type"] = 1;
+    QCOMPARE(
+        kaishiSubject(learning, reviews, -42, "Profile", {})->intervalHours, 0);
     auto pitchCard = c;
     auto pitchFields = c["fields"].toObject();
     pitchFields["Pitch Accent"] = QJsonObject{

@@ -1,4 +1,15 @@
 #include "core.h"
+
+// Indexed below so card selection never parses event JSON. Rows without a
+// grading field predate checked grading, when only recall was self-rated.
+static const QString gradedStrength =
+    "CASE WHEN json_valid(event_json) IS NOT 1 THEN mode IS NOT 'Recall' "
+    "WHEN json_extract(event_json,'$.grading') IS NULL "
+    "THEN mode IS NOT 'Recall' "
+    "ELSE (json_extract(event_json,'$.grading')='checked' AND "
+    "json_extract(event_json,'$.overridden') IS NOT 1) OR "
+    "json_extract(event_json,'$.recall_attempt_matched') IS 1 END";
+
 Store::Store(const QString &path) : directory(path) {
   if (!QDir().mkpath(path)) {
     error = "Could not create the data directory.";
@@ -25,6 +36,9 @@ Store::Store(const QString &path) : directory(path) {
   if (!db.record("attempts").contains("event_json") &&
       !q.exec("ALTER TABLE attempts ADD COLUMN event_json TEXT"))
     error = q.lastError().text();
+  q.exec("CREATE INDEX IF NOT EXISTS attempts_graded ON attempts(created_at,"
+         "subject_id,dimension,correct,local_day,(" +
+         gradedStrength + ")) WHERE correct IS NOT NULL");
   for (const auto &sql :
        {"CREATE TABLE IF NOT EXISTS wk_latest (subject_id INTEGER PRIMARY KEY, "
         "observed_at TEXT NOT NULL, data_json TEXT NOT NULL)",
@@ -117,6 +131,27 @@ bool Store::record(const Challenge &c, std::optional<bool> correct,
     return false;
   }
   return true;
+}
+QVector<GradedAttempt> Store::gradedAttempts() const {
+  QVector<GradedAttempt> out;
+  QSqlQuery q(db);
+  q.setForwardOnly(true);
+  // Replaying 30 days covers every interval up to Master and keeps card
+  // selection fast. SQLite converts timestamps; Qt's ISO parser is slower.
+  q.prepare("SELECT subject_id,dimension='Reading',correct," + gradedStrength +
+            ",CAST(round((julianday(created_at)-2440587.5)*86400000) AS "
+            "INTEGER),CAST(julianday(local_day)+0.5 AS INTEGER) FROM attempts "
+            "WHERE correct IS NOT NULL AND created_at>=? ORDER BY created_at");
+  q.addBindValue(
+      QDateTime::currentDateTimeUtc().addDays(-30).toString(Qt::ISODateWithMs));
+  q.exec();
+  while (q.next())
+    out.append({q.value(0).toInt(), q.value(1).toBool(), q.value(2).toBool(),
+                q.value(3).toBool(),
+                QDateTime::fromMSecsSinceEpoch(q.value(4).toLongLong(),
+                                               QTimeZone::UTC),
+                QDate::fromJulianDay(q.value(5).toLongLong())});
+  return out;
 }
 QList<int> Store::recentSubjects() const {
   QList<int> ids;

@@ -118,6 +118,10 @@ double stageWeight(int s) {
          : s == 8       ? 1
                         : .5;
 }
+int srsIntervalHours(int s) {
+  static const int hours[] = {4, 8, 23, 47, 167, 335, 719, 2879};
+  return s >= 1 && s <= 8 ? hours[s - 1] : 0;
+}
 QString stageName(int s) {
   return s <= 4   ? "Apprentice"
          : s <= 6 ? "Guru"
@@ -135,15 +139,25 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
                                const QJsonArray &assignments,
                                const QJsonArray &materials, int maxLevel) {
   QHash<int, int> stages;
-  QHash<int, QDateTime> started;
+  QHash<int, QDateTime> started, reviewed;
+  auto time = [](const QJsonValue &v) {
+    return QDateTime::fromString(v.toString(), Qt::ISODateWithMs);
+  };
   for (const auto &v : assignments) {
     auto d = v.toObject()["data"].toObject();
     int stage = d["srs_stage"].toInt();
-    started[d["subject_id"].toInt()] =
-        QDateTime::fromString(d["started_at"].toString(), Qt::ISODateWithMs);
+    const int id = d["subject_id"].toInt();
+    started[id] = time(d["started_at"]);
+    const int interval = srsIntervalHours(stage);
+    const auto available = time(d["available_at"]),
+               burned = time(d["burned_at"]);
+    reviewed[id] = stage == 9 && burned.isValid() ? burned
+                   : interval && available.isValid()
+                       ? available.addSecs(-3600LL * interval)
+                       : started[id];
     if (!d["started_at"].toString().isEmpty() && !d["hidden"].toBool() &&
         stageWeight(stage) > 0)
-      stages[d["subject_id"].toInt()] = stage;
+      stages[id] = stage;
   }
   QHash<int, QStringList> synonyms;
   for (const auto &v : materials) {
@@ -178,6 +192,7 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
       continue;
     s.stage = stages[s.id];
     s.startedAt = started.value(s.id);
+    s.reviewedAt = reviewed.value(s.id);
     s.characters = d["characters"].toString();
     s.kanjiReadingTypes = kanjiReadings.value(s.characters);
     s.level = d["level"].toInt();

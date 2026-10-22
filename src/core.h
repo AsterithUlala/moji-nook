@@ -8,7 +8,8 @@ struct Subject {
   QString kind, characters, url, contextJa, contextEn, readingKind;
   QStringList meanings, readings;
   QList<int> components, similar;
-  QDateTime startedAt;
+  QDateTime startedAt, reviewedAt;
+  int intervalHours = 0; // Source-reported review interval; 0 uses the stage.
   QHash<QString, QString> kanjiReadingTypes;
   // Positive IDs are WaniKani; negative IDs are durable local source mappings.
   QString source = "wanikani", sourceId, deck;
@@ -22,6 +23,7 @@ QString normalizeMeaning(QString text);
 QString toKana(QString text);
 double stageWeight(int stage);
 QString stageName(int stage);
+int srsIntervalHours(int stage);
 QVector<Subject> parseSubjects(const QJsonArray &subjects,
                                const QJsonArray &assignments,
                                const QJsonArray &materials, int maxLevel = 60);
@@ -51,6 +53,27 @@ inline QString skillKey(int id, bool reading) {
   return QString::number(id) + (reading ? ":reading" : ":meaning");
 }
 
+struct GradedAttempt {
+  int subjectId = 0;
+  bool reading = false, correct = false, strong = false;
+  QDateTime at;
+  QDate localDay;
+};
+struct SkillMemory {
+  double halfLifeDays = 0;
+  QDateTime lastSeen;
+  QDate lastCorrectDay;
+  int missesToday = 0;
+  QDateTime lastMissAt;
+};
+using Memory = QHash<QString, SkillMemory>;
+Memory estimateMemory(const QVector<Subject> &pool,
+                      const QVector<GradedAttempt> &attempts,
+                      const QDateTime &now, const QDate &today);
+double recallProbability(const SkillMemory &memory, const QDateTime &now);
+bool rested(const SkillMemory &memory, const QDateTime &now,
+            const QDate &today);
+
 class Store {
 public:
   explicit Store(const QString &directory);
@@ -67,6 +90,7 @@ public:
   bool exportCsv(const QString &path) const;
   bool observeReviews(const QJsonArray &rows, const QString &at);
   Evidence evidence() const;
+  QVector<GradedAttempt> gradedAttempts() const;
   QString insightsHtml(const QVector<Subject> &pool) const;
   QString historyHtml(int page = 0) const;
 };
