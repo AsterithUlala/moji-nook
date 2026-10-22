@@ -1,9 +1,84 @@
 #include "core.h"
+#include "quiet_hours.h"
 #include <QtTest>
 
 class CoreTest : public QObject {
   Q_OBJECT
+  // 2026-10-19 is a Monday; day 0 = Monday … day 6 = Sunday.
+  static QDateTime weekday(int day, int hour, int minute, int ms = 0) {
+    return QDateTime(QDate(2026, 10, 19).addDays(day), QTime(hour, minute).addMSecs(ms));
+  }
 private slots:
+  void quietHoursSameDayWindow() {
+    const auto schedule = QuietSchedule::parse({"1111100,09:00,17:00"});
+    QVERIFY(schedule.contains(weekday(0, 9, 0)));
+    QVERIFY(schedule.contains(weekday(4, 16, 59, 59999)));
+    QVERIFY(!schedule.contains(weekday(0, 17, 0)));
+    QVERIFY(!schedule.contains(weekday(0, 8, 59, 59999)));
+    QVERIFY(!schedule.contains(weekday(5, 10, 0)));
+    QVERIFY(!schedule.contains(weekday(6, 10, 0)));
+  }
+  void quietHoursOvernightBelongsToStartDay() {
+    // Friday night only.
+    const auto schedule = QuietSchedule::parse({"0000100,22:00,07:00"});
+    QVERIFY(schedule.contains(weekday(4, 22, 0)));
+    QVERIFY(schedule.contains(weekday(4, 23, 59, 59999)));
+    QVERIFY(schedule.contains(weekday(5, 0, 0)));
+    QVERIFY(schedule.contains(weekday(5, 6, 59, 59999)));
+    QVERIFY(!schedule.contains(weekday(5, 7, 0)));
+    QVERIFY(!schedule.contains(weekday(4, 6, 0)));
+    QVERIFY(!schedule.contains(weekday(5, 22, 30)));
+    QVERIFY(!schedule.contains(weekday(6, 1, 0)));
+    QCOMPARE(schedule.endAfter(weekday(4, 23, 0)), weekday(5, 7, 0));
+    // Sunday night ends on Monday across the week boundary.
+    const auto sunday = QuietSchedule::parse({"0000001,23:00,06:00"});
+    QVERIFY(sunday.contains(weekday(7, 5, 0)));
+    QVERIFY(!sunday.contains(weekday(6, 5, 0)));
+    QCOMPARE(sunday.endAfter(weekday(6, 23, 30)), weekday(7, 6, 0));
+  }
+  void quietHoursIgnoreEmptyWindows() {
+    QuietSchedule schedule;
+    schedule.windows = {{0, QTime(0, 0), QTime(23, 59)},
+                        {0x7f, QTime(9, 0), QTime(9, 0)}};
+    for (int day = 0; day < 7; ++day)
+      for (int hour : {0, 9, 12, 23}) {
+        QVERIFY(!schedule.contains(weekday(day, hour, 0)));
+        QVERIFY(!schedule.endAfter(weekday(day, hour, 0)));
+      }
+  }
+  void quietHoursMergeOverlappingAndAdjacentWindows() {
+    const auto schedule = QuietSchedule::parse(
+        {"1000000,09:00,12:00", "1000000,11:00,14:00", "1000000,14:00,15:30",
+         "1000000,16:00,17:00", "0000100,22:00,07:00", "0000010,07:00,09:00"});
+    QCOMPARE(schedule.endAfter(weekday(0, 9, 0)), weekday(0, 15, 30));
+    QCOMPARE(schedule.endAfter(weekday(0, 13, 0)), weekday(0, 15, 30));
+    QCOMPARE(schedule.endAfter(weekday(0, 16, 30)), weekday(0, 17, 0));
+    QVERIFY(!schedule.endAfter(weekday(0, 15, 45)));
+    const auto reversed = QuietSchedule::parse(
+        {"1000000,14:00,15:30", "1000000,11:00,14:00", "1000000,09:00,12:00"});
+    QCOMPARE(reversed.endAfter(weekday(0, 9, 0)), weekday(0, 15, 30));
+    QCOMPARE(schedule.endAfter(weekday(4, 23, 0)), weekday(5, 9, 0));
+    const auto always = QuietSchedule::parse({"1111111,00:00,12:00", "1111111,12:00,00:00"});
+    QVERIFY(always.contains(weekday(2, 18, 0)));
+    QVERIFY(!always.endAfter(weekday(2, 18, 0)));
+  }
+  void quietHoursParseAndSerialize() {
+    const QStringList entries = {"1111100,09:00,17:00", "0000011,22:30,07:15",
+                                 "0000000,10:00,11:00", "1010101,08:00,08:00"};
+    const auto schedule = QuietSchedule::parse(entries);
+    QCOMPARE(schedule.windows.size(), 4);
+    QCOMPARE(schedule.windows[0].days, quint8(0x1f));
+    QCOMPARE(schedule.windows[1].days, quint8(0x60));
+    QCOMPARE(schedule.windows[1].start, QTime(22, 30));
+    QCOMPARE(schedule.windows[1].end, QTime(7, 15));
+    QCOMPARE(schedule.serialize(), entries);
+    const auto kept = QuietSchedule::parse(
+        {"", "1111100", "1111100,09:00", "1111100,09:00,17:00,18:00",
+         "111110,09:00,17:00", "11111000,09:00,17:00", "11111x0,09:00,17:00",
+         "1111100,24:00,17:00", "1111100,09:00,noon", "1111100,9am,17:00",
+         "0000001,06:00,07:00"});
+    QCOMPARE(kept.serialize(), QStringList{"0000001,06:00,07:00"});
+  }
   void rollingAccuracyAndReadableHistory() {
     QTemporaryDir dir;
     Store store(dir.path());
