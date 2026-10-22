@@ -508,6 +508,9 @@ void App::buildDashboard() {
       applyFeedbackSettings();
     });
   };
+  practiceToggle("Type an answer before revealing", "typeBeforeReveal",
+                 "practice/type_before_reveal", true,
+                 "Recall cards ask for your answer first. You still rate yourself.");
   practiceToggle("Retry alternate kanji readings", "readingRetriesEnabled",
                  "reading_retry_enabled", true,
                  "Known alternate reading → retry, not a miss.");

@@ -190,6 +190,7 @@ bool App::saveAnkiPreview(const QString &path) {
   card.present(c, 5);
   qApp->processEvents();
   ok = card.grab().save(path + "/anki-front.png") && ok;
+  card.findChild<QLineEdit *>("readingInput")->setText(c.subject.reading());
   card.findChild<QPushButton *>("revealAnswer")->click();
   qApp->processEvents();
   ok = card.grab().save(path + "/anki-revealed.png") && ok;
@@ -287,6 +288,7 @@ bool App::savePreview(const QString &path) {
     card.present(c, 5);
     qApp->processEvents();
     ok = card.grab().save(path + QString("/theme-%1-reveal.png").arg(i)) && ok;
+    card.findChild<QLineEdit *>("readingInput")->setText("nihon");
     card.findChild<QPushButton *>("revealAnswer")->click();
     capture(card, QString("theme-%1-recall-revealed").arg(i));
     c.mode = Mode::Typing;
@@ -343,6 +345,7 @@ bool App::savePreview(const QString &path) {
         {"frequency", "250"}};
     card.present(local, 5);
     capture(card, QString("theme-%1-anki-front").arg(i));
+    card.findChild<QLineEdit *>("readingInput")->setText(local.subject.reading());
     card.findChild<QPushButton *>("revealAnswer")->click();
     capture(card, QString("theme-%1-anki-revealed").arg(i));
     card.findChild<QPushButton *>("ankiShowDetails")->click();

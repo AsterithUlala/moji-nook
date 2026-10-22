@@ -354,6 +354,8 @@ void App::applyFeedbackSettings() {
         settings.value("reading_retry_enabled", true).toBool());
     target->setNearMissRetries(
         settings.value("practice/near_miss_retry", true).toBool());
+    target->setTypeBeforeReveal(
+        settings.value("practice/type_before_reveal", true).toBool());
   }
   applySpeechSettings();
 }

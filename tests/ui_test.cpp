@@ -767,6 +767,7 @@ private slots:
     speech.configure(true, "mei", 35, 1.0);
     QSignalSpy generated(&speech, &JapaneseSpeech::generated);
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setSpeech(&speech, true, false, true); // Missing recordings fall back locally.
     card.setAnkiAudio(false, 0);
     Challenge c;
@@ -1008,7 +1009,9 @@ private slots:
       QVERIFY(active);
       QCOMPARE(active->challenge.subject.source,
                selection == "wanikani" ? QString("wanikani") : QString("anki"));
+      active->findChild<QLineEdit *>("readingInput")->setText("x");
       active->findChild<QPushButton *>("revealAnswer")->click();
+      QVERIFY(active->findChild<QPushButton *>("markRemembered")->isVisible());
       active->findChild<QPushButton *>("markRemembered")->click();
       saved.sync();
       QCOMPARE(saved.value("practice/source").toString(), selection);
@@ -1124,6 +1127,7 @@ private slots:
     QVERIFY(frontContext->isVisible());
     QCOMPARE(frontContext->text(), "出来ます。");
     QVERIFY(!frontContext->text().contains("It can be done."));
+    card.findChild<QLineEdit *>("readingInput")->setText("dekiru");
     card.findChild<QPushButton *>("revealAnswer")->click();
     QVERIFY(card.findChild<AnkiDetails *>()->isVisible());
     QVERIFY(!card.findChild<QPushButton *>("exampleToggle")->isVisible());
@@ -1576,6 +1580,90 @@ private slots:
     QCOMPARE(logged.event["reading_retries"].toArray().size(), 1);
     QVERIFY(logged.event["near_miss_retry"].toBool());
   }
+  void typeBeforeRevealGatesRecall() {
+    Card card;
+    card.setStyleSheet(appStyle());
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Recall;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *kana = card.findChild<QLabel *>("kanaPreview");
+    auto *reveal = card.findChild<QPushButton *>("revealAnswer");
+    auto *remember = card.findChild<QPushButton *>("markRemembered");
+    auto *miss = card.findChild<QPushButton *>("markMissed");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *submitted = card.findChild<QLabel *>("submittedAnswer");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    QVERIFY(!input->hasFocus());
+    QCOMPARE(input->placeholderText(), QString("Type your answer, then reveal"));
+    QVERIFY(!reveal->isEnabled());
+    reveal->click();
+    QVERIFY(!remember->isVisible());
+    input->setText("   ");
+    QVERIFY(!reveal->isEnabled());
+    QTest::keyClick(input, Qt::Key_Return);
+    QVERIFY(!remember->isVisible());
+    input->setText("nihon");
+    QVERIFY(reveal->isEnabled());
+    QVERIFY(kana->isVisible());
+    QCOMPARE(kana->text(), QString("にほん"));
+    QTest::keyClick(input, Qt::Key_Return);
+    QCOMPARE(outcome, -9);
+    QVERIFY(remember->isVisible() && miss->isVisible());
+    QVERIFY(!input->isVisible());
+    QVERIFY(submitted->isVisible());
+    QCOMPARE(submitted->text(), QString("nihon"));
+    QCOMPARE(caption->text(), QString("Your answer · Matches"));
+    QVERIFY(!typo->isVisible());
+    miss->click();
+    QCOMPARE(outcome, 0);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("nihon"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(true));
+
+    c.reading = false;
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    input->setText("Dog");
+    QVERIFY(!kana->isVisible());
+    reveal->click();
+    QCOMPARE(caption->text(), QString("Your answer"));
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("Dog"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(false));
+
+    c.reading = true;
+    card.present(c, 5);
+    QCoreApplication::processEvents();
+    const int recallHeight = card.height();
+    Challenge typed = c;
+    typed.mode = Mode::Typing;
+    card.present(typed, 5);
+    QCoreApplication::processEvents();
+    QVERIFY(recallHeight <= card.height());
+
+    card.setTypeBeforeReveal(false);
+    card.present(c, 5);
+    QVERIFY(!input->isVisible());
+    QVERIFY(reveal->isEnabled());
+    card.setTypeBeforeReveal(true);
+    reveal->click();
+    QVERIFY(remember->isVisible());
+    QVERIFY(!submitted->isVisible());
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(!logged.event.contains("recall_attempt"));
+    QVERIFY(!logged.event.contains("recall_attempt_matched"));
+  }
   void typoOverrideCountsAsCorrect() {
     Card card;
     Challenge c;
@@ -1685,6 +1773,13 @@ private slots:
     input->setText("densiya");
     check->click();
     QCOMPARE(graded.count(), 1);
+    Challenge recall = typed;
+    recall.mode = Mode::Recall;
+    preview->present(recall, 5);
+    QVERIFY(input->isVisible());
+    tabs->findChild<QCheckBox *>("typeBeforeReveal")->setChecked(false);
+    preview->present(recall, 5);
+    QVERIFY(!input->isVisible());
     preview->close();
   }
   void dashboardNavigationAndFeedbackSettings() {
@@ -1756,6 +1851,9 @@ private slots:
     auto *nearMiss = tabs->findChild<QCheckBox *>("nearMissRetry");
     QVERIFY(nearMiss && nearMiss->isChecked());
     nearMiss->setChecked(false);
+    auto *typeFirst = tabs->findChild<QCheckBox *>("typeBeforeReveal");
+    QVERIFY(typeFirst && typeFirst->isChecked());
+    typeFirst->setChecked(false);
     sound->setChecked(false);
     QVERIFY(!volume->isEnabled());
     motion->setChecked(true);
@@ -1770,6 +1868,7 @@ private slots:
     QVERIFY(saved.value("reduced_motion").toBool());
     QVERIFY(!saved.value("reading_retry_enabled").toBool());
     QCOMPARE(saved.value("practice/near_miss_retry"), QVariant(false));
+    QCOMPARE(saved.value("practice/type_before_reveal"), QVariant(false));
     QVERIFY(!store.insightsHtml({}).contains("Little milestones"));
     QVERIFY(!store.insightsHtml({}).contains("Newest first"));
     tabs->setCurrentIndex(3);
@@ -1822,6 +1921,7 @@ private slots:
     c.reading = true;
     QSignalSpy graded(&card, &Card::graded), completed(&card, &Card::completed);
     card.present(c, 5);
+    card.findChild<QLineEdit *>("readingInput")->setText("nihon");
     card.findChild<QPushButton *>("revealAnswer")->click();
     card.findChild<QPushButton *>("markRemembered")->click();
     QVERIFY(card.isVisible());
@@ -2014,7 +2114,9 @@ private slots:
       QCOMPARE(card->challenge.event["session_total"].toInt(), 2);
       const auto challenge = card->challenge;
       if (challenge.mode == Mode::Recall) {
+        card->findChild<QLineEdit *>("readingInput")->setText("x");
         card->findChild<QPushButton *>("revealAnswer")->click();
+        QVERIFY(card->findChild<QPushButton *>("markRemembered")->isVisible());
         card->findChild<QPushButton *>("markRemembered")->click();
       } else {
         if (challenge.mode == Mode::Typing) {
@@ -2206,6 +2308,7 @@ private slots:
   }
   void cardPlacementIsExplicitAndCompact() {
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setStyleSheet(appStyle());
     Challenge c;
     c.subject = demoSubjects().first();
@@ -2409,6 +2512,7 @@ private slots:
   }
   void revealAndDismiss() {
     Card card;
+    card.setTypeBeforeReveal(false);
     Challenge c;
     c.subject = demoSubjects().first();
     c.mode = Mode::Recall;

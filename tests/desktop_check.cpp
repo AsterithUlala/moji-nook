@@ -246,8 +246,10 @@ int main(int argc, char **argv) {
   c.event = {{"session_id", "desktop-test"},
              {"session_position", 1},
              {"session_total", 2}};
-  if (app.arguments().contains("--buttons") || external)
+  if (app.arguments().contains("--buttons") || external) {
     c.mode = Mode::Recall;
+    card.setTypeBeforeReveal(false); // The check measures first-click reveal.
+  }
   QObject::connect(&card, &Card::completed, &app,
                    [&](Challenge previous, int result, qint64) {
                      if (result >= 0 &&

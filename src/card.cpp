@@ -100,12 +100,7 @@ Card::Card(QWidget *parent)
   layout->addWidget(prompt);
   input = new QLineEdit;
   input->setObjectName("readingInput");
-  input->setPlaceholderText("Romaji or kana");
-  input->setStyleSheet("font-family:'Noto Sans CJK JP'; font-size:23px;");
   input->setFocusPolicy(Qt::StrongFocus);
-  input->setAccessibleName("Japanese reading");
-  input->setAccessibleDescription(
-      "Enter romaji or kana. Enter checks the answer.");
   layout->addWidget(input);
   kana = label({}, "muted");
   kana->setObjectName("kanaPreview");
@@ -236,7 +231,7 @@ Card::Card(QWidget *parent)
   hint->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
   connect(brand, &QPushButton::clicked, this, &Card::dashboardRequested);
   connect(dismiss, &QPushButton::clicked, this, [this] { finish(true); });
-  connect(reveal, &QPushButton::clicked, this, &Card::showAnswer);
+  connect(reveal, &QPushButton::clicked, this, &Card::revealAnswer);
   connect(remember, &QPushButton::clicked, this, [this] {
     if (!pending || resolved) return;
     result = 1;
@@ -274,9 +269,11 @@ Card::Card(QWidget *parent)
   connect(check, &QPushButton::clicked, this, submit);
   connect(input, &QLineEdit::returnPressed, this, submit);
   connect(input, &QLineEdit::textChanged, this, [this](const QString &text) {
+    const bool typed = !text.trimmed().isEmpty();
     kana->setText(toKana(text));
-    kana->setVisible(input->isVisible() && !text.trimmed().isEmpty());
-    check->setEnabled(!text.trimmed().isEmpty());
+    kana->setVisible(input->isVisible() && challenge.reading && typed);
+    check->setEnabled(typed);
+    reveal->setEnabled(!attemptFirst || typed);
   });
   for (auto *child : findChildren<QWidget *>())
     child->installEventFilter(this);
@@ -449,6 +446,7 @@ void Card::present(const Challenge &c, int minutes) {
   }
 #endif
   challenge = c;
+  attemptFirst = typeBeforeReveal && c.mode == Mode::Recall;
   const QString kind = c.subject.source == "wanikani" ? c.subject.kind : QString();
   const bool hasWordKind = kind == "kanji" || kind == "vocabulary" ||
                            kind == "kana_vocabulary";
@@ -521,11 +519,23 @@ void Card::present(const Challenge &c, int minutes) {
           : "";
   prompt->setText(readingType.trimmed());
   prompt->setVisible(!readingType.isEmpty());
-  input->setVisible(c.mode == Mode::Typing);
+  input->setVisible(c.mode == Mode::Typing || attemptFirst);
+  input->setPlaceholderText(attemptFirst ? "Type your answer, then reveal"
+                                         : "Romaji or kana");
+  input->setAccessibleName(c.reading ? "Japanese reading" : "Meaning");
+  input->setAccessibleDescription(
+      !attemptFirst ? "Enter romaji or kana. Enter checks the answer."
+      : c.reading   ? "Enter romaji or kana. Enter reveals the answer."
+                    : "Enter the meaning. Enter reveals the answer.");
+  input->setStyleSheet(
+      QString("font-family:'%1'; font-size:%2px;")
+          .arg(c.reading ? "Noto Sans CJK JP" : "Noto Sans")
+          .arg(attemptFirst ? 18 : 23));
   kana->hide();
   check->setVisible(c.mode == Mode::Typing);
   check->setEnabled(false);
   reveal->setVisible(c.mode == Mode::Recall);
+  reveal->setEnabled(!attemptFirst);
   choiceArea->setVisible(c.mode == Mode::Choice);
   while (auto *item = choiceLayout->takeAt(0)) {
     delete item->widget();
@@ -592,7 +602,7 @@ void Card::present(const Challenge &c, int minutes) {
     engaged = true;
     active.start();
     challenge.event["first_interaction_at"] = challenge.event["presented_at"];
-    if (c.mode == Mode::Typing)
+    if (c.mode == Mode::Typing || attemptFirst)
       input->setFocus(Qt::OtherFocusReason);
     else if (c.mode == Mode::Recall)
       reveal->setFocus(Qt::OtherFocusReason);
@@ -659,6 +669,12 @@ bool Card::eventFilter(QObject *watched, QEvent *event) {
         grade(challenge.accepts(input->text()), input->text());
       return true; // Consume submission; it must not bubble up and finish the
                    // newly graded card.
+    }
+    if ((key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) &&
+        attemptFirst && watched == input) {
+      if (!key->isAutoRepeat())
+        revealAnswer();
+      return true;
     }
     if (key->key() == Qt::Key_Escape) {
       if (!key->isAutoRepeat())
@@ -745,6 +761,35 @@ void Card::showAnswer() {
     speakAnswer();
   fitCard();
 }
+void Card::revealAnswer() {
+  if (!attemptFirst) {
+    showAnswer();
+    return;
+  }
+  const QString attempt = input->text().trimmed();
+  if (attempt.isEmpty() || answerVisible)
+    return;
+  const bool matched = challenge.accepts(attempt);
+  challenge.event["recall_attempt"] = attempt;
+  challenge.event["recall_attempt_matched"] = matched;
+  input->setEnabled(false);
+  input->hide();
+  kana->hide();
+  showSubmitted(attempt, matched ? "Your answer · Matches" : "Your answer",
+                false);
+  showAnswer();
+  if (engaged && isActiveWindow())
+    (matched ? remember : miss)->setFocus(Qt::OtherFocusReason);
+}
+void Card::showSubmitted(const QString &text, const QString &caption,
+                         bool missed) {
+  submitted->setText(text);
+  submitted->setAccessibleName("Your answer: " + text);
+  submittedCaption->setText(caption);
+  missIcon->setVisible(missed);
+  submittedRow->show();
+  answerCaption->show();
+}
 void Card::grade(bool correct, const QString &response) {
   if (resolved)
     return;
@@ -788,12 +833,8 @@ void Card::grade(bool correct, const QString &response) {
   input->setEnabled(false);
   input->hide();
   kana->hide();
-  submitted->setText(response);
-  submitted->setAccessibleName("Your answer: " + response);
-  submittedCaption->setText("Incorrect");
-  missIcon->show();
-  submittedRow->setVisible(!correct);
-  answerCaption->setVisible(!correct);
+  if (!correct)
+    showSubmitted(response, "Incorrect", true);
   typo->setVisible(!correct && challenge.mode == Mode::Typing);
   check->hide();
   choiceArea->hide();
