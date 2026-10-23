@@ -2685,6 +2685,9 @@ private slots:
     QCOMPARE(QApplication::focusWidget(), add);
   }
   void startAtLoginToggleWritesTheAutostartEntry() {
+#ifdef Q_OS_WIN
+    QSKIP("Windows uses the HKCU Run key, not an XDG autostart entry.");
+#endif
     QTemporaryDir config, dir;
     const auto savedConfig = qgetenv("XDG_CONFIG_HOME");
     const auto savedAppImage = qgetenv("APPIMAGE");
