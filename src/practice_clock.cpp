@@ -2,11 +2,13 @@
 PracticeClock::PracticeClock(QObject *parent) : QObject(parent) {
   timer.setSingleShot(true);
   timer.setTimerType(Qt::PreciseTimer);
-  connect(&timer, &QTimer::timeout, this, &PracticeClock::request);
+  connect(&timer, &QTimer::timeout, this, &PracticeClock::offer);
 }
-void PracticeClock::request() {
+// An explicit request, such as Practice now, runs even during quiet hours.
+void PracticeClock::request(bool explicitRequest) {
   if (paused || pending)
     return;
+  explicitSession = explicitRequest;
   snoozed = false;
   timer.stop();
   pending = true;
@@ -15,10 +17,16 @@ void PracticeClock::request() {
   sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   emit due();
 }
+void PracticeClock::offer() {
+  refreshQuiet();
+  if (!quiet)
+    request(false);
+}
 void PracticeClock::advance() {
   if (!pending || paused)
     return;
-  if (position >= sessionTotal) {
+  // A scheduled session that quiet hours interrupted ends after the card in use.
+  if (position >= sessionTotal || (quiet && !explicitSession)) {
     complete();
     return;
   }
@@ -28,14 +36,36 @@ void PracticeClock::advance() {
 void PracticeClock::complete() {
   pending = false;
   snoozed = false;
-  if (!paused)
-    timer.start(intervalMs);
+  startInterval();
 }
 void PracticeClock::setPaused(bool value) {
   paused = value;
   snoozed = false;
   if (paused)
     timer.stop();
-  else if (!pending)
-    timer.start(intervalMs);
+  else
+    startInterval();
+}
+void PracticeClock::refreshQuiet() {
+  const bool value = quietHours.contains(QDateTime::currentDateTime());
+  if (value == quiet)
+    return;
+  quiet = value;
+  if (quiet)
+    timer.stop();
+  else
+    startInterval();
+  emit quietChanged(quiet);
+}
+void PracticeClock::snooze(int ms) {
+  snoozed = true;
+  snoozeUntil = QDateTime::currentDateTimeUtc().addMSecs(ms);
+  startInterval();
+}
+void PracticeClock::startInterval() {
+  if (paused || quiet || pending)
+    return;
+  const qint64 left =
+      snoozed ? QDateTime::currentDateTimeUtc().msecsTo(snoozeUntil) : 0;
+  timer.start(left > 0 ? int(qMin<qint64>(left, INT_MAX)) : intervalMs);
 }

@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
   application.setApplicationDisplayName("Moji Nook");
   application.setDesktopFileName("moji-nook");
   application.setOrganizationName("MojiNook");
-  application.setApplicationVersion("0.2.0-alpha");
+  application.setApplicationVersion("0.3.0-alpha");
   application.setQuitOnLastWindowClosed(false);
   application.setStyle("Fusion");
   application.setStyleSheet(appStyle());
@@ -139,6 +139,9 @@ int main(int argc, char **argv) {
     return app.saveAnkiPreview(parser.value("anki-preview")) ? 0 : 1;
   if (parser.isSet("preview"))
     return app.savePreview(parser.value("preview")) ? 0 : 1;
-  app.start(parser.isSet("demo"), parser.isSet("tray"));
+  QStringList loginArgs;
+  if (parser.isSet("data-dir"))
+    loginArgs << "--data-dir" << QFileInfo(data).absoluteFilePath();
+  app.start(parser.isSet("demo"), parser.isSet("tray"), loginArgs);
   return application.exec();
 }

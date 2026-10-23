@@ -32,6 +32,46 @@ class UiTest : public QObject {
     state.settled = 1;
     return state;
   }
+  // A window that is quiet right now, attached to the day it starts.
+  static QuietWindow quietAround(int beforeMs, int afterMs) {
+    const auto now = QDateTime::currentDateTime();
+    const auto start = now.addMSecs(-beforeMs), end = now.addMSecs(afterMs);
+    return {quint8(1 << (start.date().dayOfWeek() - 1)), start.time(), end.time()};
+  }
+  static QString quietEntry(const QuietWindow &window) {
+    QuietSchedule schedule;
+    schedule.windows = {window};
+    return schedule.serialize().first();
+  }
+  static void answer(Card *card) {
+    const auto challenge = card->challenge;
+    if (challenge.mode == Mode::Recall) {
+      card->findChild<QPushButton *>("revealAnswer")->click();
+      card->findChild<QPushButton *>("markRemembered")->click();
+      return;
+    }
+    if (challenge.mode == Mode::Typing) {
+      card->findChild<QLineEdit *>("readingInput")->setText(challenge.subject.reading());
+      card->findChild<QPushButton *>("checkReading")->click();
+    } else {
+      for (auto *button : card->findChildren<QPushButton *>())
+        if (button->property("answer").isValid() &&
+            challenge.accepts(button->property("answer").toString())) {
+          button->click();
+          break;
+        }
+    }
+    card->findChild<QPushButton *>("finishCard")->click();
+  }
+  // Point the row at a window around now, attached to the day it starts.
+  static void coverNow(QFrame *row) {
+    const auto window = quietAround(60000, 3600000);
+    for (int i = 0; i < 7; ++i)
+      row->findChildren<QPushButton *>()[i]->setChecked(window.days >> i & 1);
+    auto edits = row->findChildren<QTimeEdit *>();
+    edits[0]->setTime(window.start);
+    edits[1]->setTime(window.end);
+  }
 private slots:
   void progressionRecapIsPassiveAndEmptyNoticesStayHidden() {
     ProgressRecap recap;
@@ -767,6 +807,7 @@ private slots:
     speech.configure(true, "mei", 35, 1.0);
     QSignalSpy generated(&speech, &JapaneseSpeech::generated);
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setSpeech(&speech, true, false, true); // Missing recordings fall back locally.
     card.setAnkiAudio(false, 0);
     Challenge c;
@@ -1008,7 +1049,9 @@ private slots:
       QVERIFY(active);
       QCOMPARE(active->challenge.subject.source,
                selection == "wanikani" ? QString("wanikani") : QString("anki"));
+      active->findChild<QLineEdit *>("readingInput")->setText("x");
       active->findChild<QPushButton *>("revealAnswer")->click();
+      QVERIFY(active->findChild<QPushButton *>("markRemembered")->isVisible());
       active->findChild<QPushButton *>("markRemembered")->click();
       saved.sync();
       QCOMPARE(saved.value("practice/source").toString(), selection);
@@ -1124,6 +1167,7 @@ private slots:
     QVERIFY(frontContext->isVisible());
     QCOMPARE(frontContext->text(), "出来ます。");
     QVERIFY(!frontContext->text().contains("It can be done."));
+    card.findChild<QLineEdit *>("readingInput")->setText("dekiru");
     card.findChild<QPushButton *>("revealAnswer")->click();
     QVERIFY(card.findChild<AnkiDetails *>()->isVisible());
     QVERIFY(!card.findChild<QPushButton *>("exampleToggle")->isVisible());
@@ -1493,6 +1537,453 @@ private slots:
     c.mode = Mode::Choice;
     QVERIFY(c.readingRetryHint("ashi").isEmpty());
   }
+  void nearMissGetsOneRetry() {
+    Card card;
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "電車";
+    c.subject.meanings = {"Train"};
+    c.subject.readings = {"でんしゃ"};
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *warning = card.findChild<QLabel *>("readingWarning");
+    auto *answer = card.findChild<QLabel *>("answer");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    const QString almost = "Almost. Check your spelling and try again.";
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    QVERIFY(warning->isVisible());
+    QCOMPARE(warning->text(), almost);
+    QVERIFY(input->isVisible() && input->isEnabled());
+    QCOMPARE(input->text(), QString("densiya"));
+    QVERIFY(!answer->isVisible());
+    input->setText("densha");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("densha"));
+
+    card.present(c, 5);
+    input->setText("でんしや");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    check->click();
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.last().first().toBool());
+    QVERIFY(!warning->isVisible());
+    QVERIFY(answer->isVisible());
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+
+    card.setNearMissRetries(false);
+    card.present(c, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 3);
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("near_miss_retry"));
+    card.setNearMissRetries(true);
+
+    c.subject.kind = "kanji";
+    c.subject.characters = "日";
+    c.subject.readings = {"にち"};
+    c.subject.readingKind = "onyomi";
+    c.subject.kanjiReadingTypes = {
+        {"にち", "onyomi"}, {"ひ", "kunyomi"}, {"にく", "kunyomi"}};
+    card.present(c, 5);
+    input->setText("niku");
+    check->click();
+    QVERIFY(warning->text().contains("on’yomi"));
+    check->click();
+    QCOMPARE(warning->text(), almost);
+    QCOMPARE(graded.count(), 3);
+    check->click();
+    QCOMPARE(graded.count(), 4);
+    QVERIFY(!graded.last().first().toBool());
+    finish->click();
+    QCOMPARE(logged.event["reading_retries"].toArray().size(), 1);
+    QVERIFY(logged.event["near_miss_retry"].toBool());
+  }
+  void typeBeforeRevealGatesRecall() {
+    Card card;
+    card.setStyleSheet(appStyle());
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Recall;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *kana = card.findChild<QLabel *>("kanaPreview");
+    auto *reveal = card.findChild<QPushButton *>("revealAnswer");
+    auto *remember = card.findChild<QPushButton *>("markRemembered");
+    auto *miss = card.findChild<QPushButton *>("markMissed");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *submitted = card.findChild<QLabel *>("submittedAnswer");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    QVERIFY(!input->hasFocus());
+    QCOMPARE(input->placeholderText(), QString("Type your answer, then reveal"));
+    QVERIFY(!reveal->isEnabled());
+    reveal->click();
+    QVERIFY(!remember->isVisible());
+    input->setText("   ");
+    QVERIFY(!reveal->isEnabled());
+    QTest::keyClick(input, Qt::Key_Return);
+    QVERIFY(!remember->isVisible());
+    input->setText("nihon");
+    QVERIFY(reveal->isEnabled());
+    QVERIFY(kana->isVisible());
+    QCOMPARE(kana->text(), QString("にほん"));
+    QTest::keyClick(input, Qt::Key_Return);
+    QCOMPARE(outcome, -9);
+    QVERIFY(remember->isVisible() && miss->isVisible());
+    QVERIFY(!input->isVisible());
+    QVERIFY(submitted->isVisible());
+    QCOMPARE(submitted->text(), QString("にほん"));
+    QCOMPARE(caption->text(), QString("Your answer · Matches"));
+    QVERIFY(!typo->isVisible());
+    miss->click();
+    QCOMPARE(outcome, 0);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("nihon"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(true));
+
+    c.reading = false;
+    card.present(c, 5);
+    QVERIFY(input->isVisible());
+    input->setText("Dog");
+    QVERIFY(!kana->isVisible());
+    reveal->click();
+    QCOMPARE(caption->text(), QString("Your answer"));
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QCOMPARE(logged.event["recall_attempt"].toString(), QString("Dog"));
+    QCOMPARE(logged.event["recall_attempt_matched"], QJsonValue(false));
+
+    c.reading = true;
+    card.present(c, 5);
+    QCoreApplication::processEvents();
+    const int recallHeight = card.height();
+    Challenge typed = c;
+    typed.mode = Mode::Typing;
+    card.present(typed, 5);
+    QCoreApplication::processEvents();
+    QVERIFY(recallHeight <= card.height());
+
+    card.setTypeBeforeReveal(false);
+    card.present(c, 5);
+    QVERIFY(!input->isVisible());
+    QVERIFY(reveal->isEnabled());
+    card.setTypeBeforeReveal(true);
+    reveal->click();
+    QVERIFY(remember->isVisible());
+    QVERIFY(!submitted->isVisible());
+    remember->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(!logged.event.contains("recall_attempt"));
+    QVERIFY(!logged.event.contains("recall_attempt_matched"));
+  }
+  void typoOverrideCountsAsCorrect() {
+    Card card;
+    Challenge c;
+    c.subject = demoSubjects().first();
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    QSignalSpy graded(&card, &Card::graded);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *typo = card.findChild<QPushButton *>("countAsCorrect");
+    auto *caption = card.findChild<QLabel *>("submittedCaption");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    QVERIFY(typo && caption);
+    card.present(c, 5);
+    QVERIFY(!typo->isVisible());
+    input->setText("sakana");
+    check->click();
+    QVERIFY(typo->isVisible());
+    QCOMPARE(typo->text(), QString("I made a typo"));
+    QCOMPARE(typo->accessibleName(), QString("Count this answer as correct"));
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    typo->click();
+    QVERIFY(!typo->isVisible());
+    QCOMPARE(caption->text(), QString("Counted as correct"));
+    QCOMPARE(graded.count(), 2);
+    QVERIFY(!graded.first().first().toBool());
+    QVERIFY(graded.last().first().toBool());
+    typo->click();
+    QCOMPARE(graded.count(), 2);
+    finish->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(logged.event["overridden"].toBool());
+    QCOMPARE(logged.event["submitted_answer"].toString(), QString("sakana"));
+    QTemporaryDir directory;
+    Store store(directory.path());
+    QVERIFY(store.record(logged, outcome == 1, 0));
+    QSqlQuery q(store.db);
+    QVERIFY(q.exec("SELECT correct, event_json FROM attempts"));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toInt(), 1);
+    const auto saved = QJsonDocument::fromJson(q.value(1).toByteArray()).object();
+    QCOMPARE(saved["outcome"].toString(), QString("correct"));
+    QCOMPARE(saved["grading"].toString(), QString("checked"));
+    QVERIFY(saved["overridden"].toBool());
+
+    card.present(c, 5);
+    input->setText("sakana");
+    check->click();
+    QCOMPARE(caption->text(), QString("Incorrect"));
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!logged.event.contains("overridden"));
+    card.present(c, 5);
+    input->setText(c.subject.reading());
+    check->click();
+    QVERIFY(!typo->isVisible());
+    Challenge choice = c;
+    choice.mode = Mode::Choice;
+    choice.choices = {"にほん", "ほんじつ", "まいにち", "きゅうじつ"};
+    card.present(choice, 5);
+    for (auto *b : card.findChildren<QPushButton *>())
+      if (b->property("answer").toString() == "ほんじつ")
+        b->click();
+    QVERIFY(card.findChild<QLabel *>("submittedAnswer")->isVisible());
+    QVERIFY(!typo->isVisible());
+    card.close();
+  }
+  void memoryHelpOnlyAfterMiss() {
+    Card card;
+    Challenge c;
+    c.subject.kind = "kanji";
+    c.subject.characters = "大";
+    c.subject.meanings = {"Big"};
+    c.subject.readings = {"たい"};
+    c.subject.readingKind = "onyomi";
+    c.subject.similarKanji = {{"犬", "Dog", "けん"}, {"太", "Fat", "た"}};
+    c.subject.readingMnemonic = "Say <reading>たい</reading>. <script>x</script>";
+    c.subject.meaningMnemonic = "A <radical>person</radical> stretches.";
+    c.mode = Mode::Typing;
+    c.reading = true;
+    Challenge logged;
+    int outcome = -9;
+    connect(&card, &Card::completed, [&](Challenge done, int result, qint64) {
+      logged = done;
+      outcome = result;
+    });
+    auto *help = card.findChild<QFrame *>("memoryHelp");
+    auto *similar = card.findChild<QLabel *>("similarKanji");
+    auto *mnemonic = card.findChild<QLabel *>("mnemonic");
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    auto *check = card.findChild<QPushButton *>("checkReading");
+    auto *finish = card.findChild<QPushButton *>("finishCard");
+    QVERIFY(help && similar && mnemonic);
+    auto helpText = [help] {
+      QStringList texts;
+      for (auto *part : help->findChildren<QLabel *>())
+        if (part->isVisible())
+          texts << part->text();
+      return texts.join('\n');
+    };
+    auto missTyped = [&] {
+      card.present(c, 5);
+      input->setText("sakana");
+      check->click();
+    };
+    missTyped();
+    QVERIFY(!help->isVisible());
+    card.setMissDetails(true);
+    missTyped();
+    QVERIFY(help->isVisible());
+    QVERIFY(helpText().contains("Looks similar"));
+    QVERIFY(similar->text().contains("犬"));
+    QVERIFY(similar->text().contains("Dog · けん"));
+    QVERIFY(similar->text().contains("太"));
+    QVERIFY(helpText().contains("Reading mnemonic"));
+    QCOMPARE(mnemonic->textFormat(), Qt::RichText);
+    QVERIFY(mnemonic->text().contains("<b>たい</b>"));
+    QVERIFY(mnemonic->text().contains("&lt;script&gt;"));
+    QVERIFY(!mnemonic->text().contains("<script>"));
+    card.findChild<QPushButton *>("countAsCorrect")->click();
+    QVERIFY(!help->isVisible());
+    finish->click();
+
+    card.present(c, 5);
+    input->setText("tai");
+    check->click();
+    QVERIFY(!help->isVisible());
+    finish->click();
+
+    Challenge choice = c;
+    choice.mode = Mode::Choice;
+    choice.reading = false;
+    choice.choices = {"Big", "Dog", "Fat", "Small"};
+    card.present(choice, 5);
+    for (auto *b : card.findChildren<QPushButton *>())
+      if (b->property("answer").toString() == "Dog")
+        b->click();
+    QVERIFY(help->isVisible());
+    QVERIFY(helpText().contains("Meaning mnemonic"));
+    QVERIFY(mnemonic->text().contains("<b>person</b>"));
+    QVERIFY(!mnemonic->text().contains("たい"));
+    finish->click();
+
+    Challenge recall = c;
+    recall.mode = Mode::Recall;
+    card.present(recall, 5);
+    input->setText("tai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markRemembered")->click();
+    QCOMPARE(outcome, 1);
+    QVERIFY(!help->isVisible());
+    outcome = -9;
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, -9);
+    QVERIFY(card.isVisible());
+    QVERIFY(help->isVisible());
+    QVERIFY(finish->isVisible());
+    QVERIFY(!card.findChild<QPushButton *>("markMissed")->isVisible());
+    finish->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(logged.event.contains("graded_at"));
+
+    recall.subject.source = "anki";
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, 0);
+    QVERIFY(!help->isVisible());
+    outcome = -9;
+    recall.subject.source = "wanikani";
+    recall.subject.similarKanji.clear();
+    recall.subject.readingMnemonic.clear();
+    card.present(recall, 5);
+    input->setText("dai");
+    card.findChild<QPushButton *>("revealAnswer")->click();
+    card.findChild<QPushButton *>("markMissed")->click();
+    QCOMPARE(outcome, 0);
+  }
+  void practiceTogglesReachCards() {
+    QTemporaryDir directory;
+    Store store(directory.path());
+    App app(store, directory.path());
+    app.showSettings();
+    QTabWidget *tabs = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *found = window->findChild<QTabWidget *>("dashboardTabs"))
+        tabs = found;
+    QVERIFY(tabs);
+    tabs->window()->findChild<QComboBox *>("previewChallengeMode")->setCurrentIndex(1);
+    Card *preview = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *card = qobject_cast<Card *>(window);
+          card && card->isVisible() && card->windowTitle().contains("Settings preview"))
+        preview = card;
+    QVERIFY(preview);
+    Challenge typed;
+    typed.subject.kind = "vocabulary";
+    typed.subject.characters = "電車";
+    typed.subject.meanings = {"Train"};
+    typed.subject.readings = {"でんしゃ"};
+    typed.mode = Mode::Typing;
+    typed.reading = true;
+    QSignalSpy graded(preview, &Card::graded);
+    auto *input = preview->findChild<QLineEdit *>("readingInput");
+    auto *check = preview->findChild<QPushButton *>("checkReading");
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 0);
+    tabs->findChild<QCheckBox *>("nearMissRetry")->setChecked(false);
+    preview->present(typed, 5);
+    input->setText("densiya");
+    check->click();
+    QCOMPARE(graded.count(), 1);
+    Challenge recall = typed;
+    recall.mode = Mode::Recall;
+    preview->present(recall, 5);
+    QVERIFY(input->isVisible());
+    tabs->findChild<QCheckBox *>("typeBeforeReveal")->setChecked(false);
+    preview->present(recall, 5);
+    QVERIFY(!input->isVisible());
+    typed.subject.meaningMnemonic = typed.subject.readingMnemonic = "Mnemonic";
+    auto *help = preview->findChild<QFrame *>("memoryHelp");
+    preview->present(typed, 5);
+    input->setText("sakana");
+    check->click();
+    QVERIFY(!help->isVisible());
+    tabs->findChild<QCheckBox *>("missDetails")->setChecked(true);
+    preview->present(typed, 5);
+    input->setText("sakana");
+    check->click();
+    QVERIFY(help->isVisible());
+    preview->close();
+  }
+  void burnedShareKeepsSavedMix_data() {
+    QTest::addColumn<QVariantList>("saved");
+    QTest::addColumn<int>("burned");
+    QTest::newRow("saved mix gains the default")
+        << QVariantList{30, 25, 20, {}} << 10;
+    QTest::newRow("full mix has no room") << QVariantList{0, 95, 5, {}} << 0;
+    QTest::newRow("tight mix clamps") << QVariantList{50, 30, 15, {}} << 5;
+    QTest::newRow("saved burned share") << QVariantList{30, 25, 20, 3} << 3;
+  }
+  void burnedShareKeepsSavedMix() {
+    QFETCH(QVariantList, saved);
+    QFETCH(int, burned);
+    QTemporaryDir directory;
+    const QStringList keys = {"newest_share", "recent_share",
+                              "persistent_share", "burned_share"};
+    {
+      QSettings settings(directory.path() + "/settings.ini",
+                         QSettings::IniFormat);
+      for (int i = 0; i < keys.size(); ++i)
+        if (saved[i].isValid())
+          settings.setValue(keys[i], saved[i]);
+    }
+    Store store(directory.path());
+    App app(store, directory.path());
+    app.showDashboard();
+    QSlider *slider = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (auto *found = window->findChild<QSlider *>("burnedShare"))
+        slider = found;
+    QVERIFY(slider);
+    QCOMPARE(slider->value(), burned);
+    QSettings after(directory.path() + "/settings.ini", QSettings::IniFormat);
+    for (int i = 0; i < 3; ++i)
+      QCOMPARE(after.value(keys[i]).toInt(), saved[i].toInt());
+    QCOMPARE(after.value("burned_share").toInt(), burned);
+  }
   void dashboardNavigationAndFeedbackSettings() {
     QTemporaryDir directory;
     Store store(directory.path());
@@ -1548,9 +2039,26 @@ private slots:
     QCOMPARE(newest->value(), 30);
     QCOMPARE(recent->value(), 25);
     QCOMPARE(persistent->value(), 20);
+    auto *burned = tabs->findChild<QSlider *>("burnedShare");
+    QVERIFY(burned);
+    QCOMPARE(burned->accessibleName(), QString("Burned items"));
+    QCOMPARE(burned->value(), 10);
+    QCOMPARE(burned->maximum(), 25);
+    auto labelText = [tabs](const QString &prefix) {
+      for (auto *l : tabs->findChildren<QLabel *>())
+        if (l->text().startsWith(prefix))
+          return l->text();
+      return QString();
+    };
+    QCOMPARE(labelText("Broad recall ·"), QString("Broad recall · 15%"));
+    QCOMPARE(labelText("Mix:"),
+             QString("Mix: 30% newest · 25% recent · 20% persistent · 10% "
+                     "burned · 15% broad"));
     newest->setValue(0);
     recent->setValue(95);
     QCOMPARE(persistent->value(), 5);
+    QCOMPARE(burned->value(), 0);
+    QCOMPARE(labelText("Broad recall ·"), QString("Broad recall · 0%"));
     recall->setValue(100);
     QCOMPARE(typed->value(), 0);
     QVERIFY(motion);
@@ -1559,6 +2067,15 @@ private slots:
     QVERIFY(readingRetries);
     QVERIFY(readingRetries->isChecked());
     readingRetries->setChecked(false);
+    auto *nearMiss = tabs->findChild<QCheckBox *>("nearMissRetry");
+    QVERIFY(nearMiss && nearMiss->isChecked());
+    nearMiss->setChecked(false);
+    auto *typeFirst = tabs->findChild<QCheckBox *>("typeBeforeReveal");
+    QVERIFY(typeFirst && typeFirst->isChecked());
+    typeFirst->setChecked(false);
+    auto *missDetails = tabs->findChild<QCheckBox *>("missDetails");
+    QVERIFY(missDetails && !missDetails->isChecked());
+    missDetails->setChecked(true);
     sound->setChecked(false);
     QVERIFY(!volume->isEnabled());
     motion->setChecked(true);
@@ -1567,11 +2084,15 @@ private slots:
     QCOMPARE(saved.value("newest_share").toInt(), 0);
     QCOMPARE(saved.value("recent_share").toInt(), 95);
     QCOMPARE(saved.value("persistent_share").toInt(), 5);
+    QCOMPARE(saved.value("burned_share").toInt(), 0);
     QCOMPARE(saved.value("recall_share").toInt(), 100);
     QCOMPARE(saved.value("typed_share").toInt(), 0);
     QVERIFY(!saved.value("sound_enabled").toBool());
     QVERIFY(saved.value("reduced_motion").toBool());
     QVERIFY(!saved.value("reading_retry_enabled").toBool());
+    QCOMPARE(saved.value("practice/near_miss_retry"), QVariant(false));
+    QCOMPARE(saved.value("practice/type_before_reveal"), QVariant(false));
+    QCOMPARE(saved.value("practice/miss_details"), QVariant(true));
     QVERIFY(!store.insightsHtml({}).contains("Little milestones"));
     QVERIFY(!store.insightsHtml({}).contains("Newest first"));
     tabs->setCurrentIndex(3);
@@ -1624,6 +2145,7 @@ private slots:
     c.reading = true;
     QSignalSpy graded(&card, &Card::graded), completed(&card, &Card::completed);
     card.present(c, 5);
+    card.findChild<QLineEdit *>("readingInput")->setText("nihon");
     card.findChild<QPushButton *>("revealAnswer")->click();
     card.findChild<QPushButton *>("markRemembered")->click();
     QVERIFY(card.isVisible());
@@ -1688,7 +2210,7 @@ private slots:
     Store store(directory.path());
     auto empty = loadChartData(store);
     QCOMPARE(empty.days.size(), 28);
-    QCOMPARE(empty.mix, QVector<int>({0, 0, 0, 0, 0}));
+    QCOMPARE(empty.mix, QVector<int>({0, 0, 0, 0, 0, 0}));
     Challenge c;
     c.subject = demoSubjects().first();
     c.mode = Mode::Typing;
@@ -1709,17 +2231,20 @@ private slots:
     QCOMPARE(data.days.last().readingTotal, 1);
     QCOMPARE(data.days.last().readingCorrect, 0);
     QCOMPARE(data.days.last().meaningCorrect, 1);
-    QCOMPARE(data.mix, QVector<int>({3, 0, 1, 0, 0}));
+    QCOMPARE(data.mix, QVector<int>({3, 0, 1, 0, 0, 0}));
     QCOMPARE(data.formatTotal, QVector<int>({1, 2, 1}));
     QCOMPARE(data.formatCorrect, QVector<int>({1, 1, 1}));
     QCOMPARE(std::accumulate(data.hourTotal.begin(), data.hourTotal.end(), 0),
              4);
     QSqlQuery legacy(store.db);
     QVERIFY(legacy.exec("UPDATE attempts SET event_json=NULL WHERE id=3"));
-    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 0}));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 0, 0}));
     c.selectionReason = "Newest 30";
     QVERIFY(store.record(c, true, 100));
-    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1}));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1, 0}));
+    c.selectionReason = "Burned review";
+    QVERIFY(store.record(c, true, 100));
+    QCOMPARE(loadChartData(store).mix, QVector<int>({2, 0, 1, 1, 1, 1}));
     InsightsBrowser browser;
     browser.resize(760, 700);
     browser.show();
@@ -1814,9 +2339,16 @@ private slots:
     for (int position = 1; position <= 2; ++position) {
       QCOMPARE(card->challenge.event["session_position"].toInt(), position);
       QCOMPARE(card->challenge.event["session_total"].toInt(), 2);
+      QCOMPARE(card->challenge.event["picker_version"].toInt(), 5);
+      QCOMPARE(card->challenge.event["burned_share"].toInt(), 10);
+      const double estimate =
+          card->challenge.event["recall_estimate"].toDouble(-1);
+      QVERIFY(estimate >= 0 && estimate <= 1);
       const auto challenge = card->challenge;
       if (challenge.mode == Mode::Recall) {
+        card->findChild<QLineEdit *>("readingInput")->setText("x");
         card->findChild<QPushButton *>("revealAnswer")->click();
+        QVERIFY(card->findChild<QPushButton *>("markRemembered")->isVisible());
         card->findChild<QPushButton *>("markRemembered")->click();
       } else {
         if (challenge.mode == Mode::Typing) {
@@ -1854,7 +2386,9 @@ private slots:
     spin.setValue(5);
     ScrollSafeSlider slider;
     slider.setValue(30);
-    for (QWidget *widget : QList<QWidget *>{&combo, &spin, &slider}) {
+    ScrollSafeTimeEdit time;
+    time.setTime(QTime(9, 0));
+    for (QWidget *widget : QList<QWidget *>{&combo, &spin, &slider, &time}) {
       widget->show();
       widget->setFocus();
       QWheelEvent event(QPointF(5, 5), widget->mapToGlobal(QPoint(5, 5)),
@@ -1866,12 +2400,355 @@ private slots:
     QCOMPARE(combo.currentIndex(), 1);
     QCOMPARE(spin.value(), 5);
     QCOMPARE(slider.value(), 30);
+    QCOMPARE(time.time(), QTime(9, 0));
     QTest::keyClick(&slider, Qt::Key_Right);
     QCOMPARE(slider.value(), 31);
     QTest::keyClick(&combo, Qt::Key_Down);
     QCOMPARE(combo.currentIndex(), 2);
     QTest::keyClick(&spin, Qt::Key_Up);
     QCOMPARE(spin.value(), 6);
+  }
+  void quietHoursHoldScheduledSessions() {
+    PracticeClock clock;
+    clock.intervalMs = 30;
+    QSignalSpy due(&clock, &PracticeClock::due);
+    QSignalSpy quietChanges(&clock, &PracticeClock::quietChanged);
+    clock.complete();
+    QVERIFY(clock.timer.isActive());
+    // Quiet hours begin between heartbeats; the expiring timer must not offer.
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 0);
+    QVERIFY(clock.quiet);
+    QVERIFY(!clock.timer.isActive());
+    QCOMPARE(quietChanges.count(), 1);
+    QCOMPARE(quietChanges.last().first().toBool(), true);
+    clock.refreshQuiet();
+    QCOMPARE(quietChanges.count(), 1);
+    // Quiet ending starts a fresh interval: no immediate card, no backlog.
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(!clock.quiet);
+    QCOMPARE(quietChanges.last().first().toBool(), false);
+    QCOMPARE(due.count(), 0);
+    QVERIFY(clock.timer.isActive());
+    QTRY_COMPARE(due.count(), 1);
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 1);
+    clock.complete();
+    // An explicit session still runs to completion during quiet hours.
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    QVERIFY(!clock.timer.isActive());
+    clock.offer();
+    QCOMPARE(due.count(), 1);
+    clock.request();
+    QCOMPARE(due.count(), 2);
+    clock.advance();
+    QCOMPARE(clock.position, 2);
+    QCOMPARE(due.count(), 3);
+    clock.advance();
+    QVERIFY(!clock.pending);
+    QVERIFY(!clock.timer.isActive());
+    // Pause and quiet hold sessions independently.
+    clock.setPaused(true);
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.paused);
+    QVERIFY(!clock.timer.isActive());
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.setPaused(false);
+    QVERIFY(!clock.paused);
+    QVERIFY(clock.quiet);
+    QVERIFY(!clock.timer.isActive());
+    QTest::qWait(80);
+    QCOMPARE(due.count(), 3);
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.timer.isActive());
+  }
+  void quietHoursEndScheduledSessionsAfterTheCardInUse() {
+    PracticeClock clock;
+    clock.intervalMs = 3600000;
+    clock.sessionSize = 3;
+    QSignalSpy due(&clock, &PracticeClock::due);
+    clock.offer();
+    QCOMPARE(due.count(), 1);
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.advance();
+    QCOMPARE(due.count(), 1);
+    QVERIFY(!clock.pending);
+    QVERIFY(!clock.timer.isActive());
+  }
+  void snoozeOutlastsQuietHours() {
+    PracticeClock clock;
+    clock.intervalMs = 60000;
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.snooze(30 * 60000);
+    QVERIFY(!clock.timer.isActive());
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.timer.isActive());
+    QVERIFY(clock.snoozed);
+    QVERIFY(clock.timer.remainingTime() > 29 * 60000);
+  }
+  void quietHoursTextNamesTheEnd() {
+    const QDateTime friday(QDate(2026, 10, 23), QTime(23, 0));
+    const QLocale locale;
+    QuietSchedule schedule;
+    schedule.windows = {{0x10, QTime(22, 0), QTime(7, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday),
+             "Quiet hours until " + locale.toString(QTime(7, 0), QLocale::ShortFormat));
+    schedule.windows += {{0x20, QTime(7, 0), QTime(0, 0)}, {0x40, QTime(0, 0), QTime(9, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday),
+             "Quiet hours until Sunday " + locale.toString(QTime(9, 0), QLocale::ShortFormat));
+    schedule.windows = {{0x7f, QTime(0, 0), QTime(12, 0)}, {0x7f, QTime(12, 0), QTime(0, 0)}};
+    QCOMPARE(quietHoursText(schedule, friday), QString("Quiet hours"));
+  }
+  void quietHoursAtLaunchWaitForPracticeNow() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("practice/quiet_hours", QStringList{quietEntry(quietAround(60000, 3600000))});
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(true, true);
+    auto visibleCard = [] {
+      for (auto *window : QApplication::topLevelWidgets())
+        if (auto *candidate = qobject_cast<Card *>(window);
+            candidate && candidate->isVisible())
+          return candidate;
+      return static_cast<Card *>(nullptr);
+    };
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    QVERIFY(dashboard);
+    auto *schedule = dashboard->findChild<QLabel *>("practiceSchedule");
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    QCOMPARE(dashboard->findChild<QLabel *>("studioHero")->text(), QString("Quiet hours"));
+    QTest::qWait(1200);
+    QVERIFY(!visibleCard());
+    dashboard->findChild<QPushButton *>("studioBegin")->click();
+    QVERIFY(visibleCard());
+    QTRY_VERIFY(schedule->text().startsWith("Practice session"));
+  }
+  void quietHoursSettingsHoldAndRestoreCards() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("speech/enabled", false);
+    prefs.setValue("sound_enabled", false);
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(true, true);
+    Card *card = nullptr;
+    auto locate = [&] {
+      for (auto *window : QApplication::topLevelWidgets())
+        if (auto *candidate = qobject_cast<Card *>(window);
+            candidate && candidate->isVisible())
+          card = candidate;
+      return card != nullptr;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(locate(), 2000);
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    auto *schedule = dashboard->findChild<QLabel *>("practiceSchedule");
+    auto *pause = dashboard->findChild<QPushButton *>("pauseReminders");
+    auto *add = dashboard->findChild<QPushButton *>("addQuietHours");
+    QVERIFY(schedule && pause && add);
+    // Let removed rows finish deleting, as the event loop would between clicks.
+    auto rows = [dashboard] {
+      QTest::qWait(1);
+      return dashboard->findChildren<QFrame *>("quietHoursRow");
+    };
+    add->click();
+    QCOMPARE(rows().size(), 1);
+    QCOMPARE(QuietSchedule::parse(QSettings(dir.path() + "/settings.ini", QSettings::IniFormat)
+                                      .value("practice/quiet_hours").toStringList())
+                 .serialize(),
+             QStringList{"1111100,09:00,17:00"});
+    // An untouched card hides as soon as the schedule covers now.
+    coverNow(rows().first());
+    QVERIFY(!card->isVisible());
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    // Pausing during quiet hours outlasts them.
+    pause->click();
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QVERIFY(!card->isVisible());
+    QTRY_COMPARE(schedule->text(), QString("Practice is paused"));
+    QVERIFY(rows().isEmpty());
+    QVERIFY(QSettings(dir.path() + "/settings.ini", QSettings::IniFormat)
+                .value("practice/quiet_hours").toStringList().join("").isEmpty());
+    pause->click();
+    QVERIFY(card->isVisible());
+    // Resuming during quiet hours shows nothing; the card returns when they end.
+    add->click();
+    coverNow(rows().first());
+    QVERIFY(!card->isVisible());
+    pause->click();
+    pause->click();
+    QVERIFY(!card->isVisible());
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QVERIFY(card->isVisible());
+    // A card in use stays through the start of quiet hours.
+    QTest::mouseClick(card->findChild<QFrame *>("wordStage"), Qt::LeftButton);
+    QVERIFY(card->isEngaged());
+    add->click();
+    coverNow(rows().first());
+    QVERIFY(card->isVisible());
+    // The scheduled session ends with the card in use; card 2 never appears.
+    answer(card);
+    QTRY_VERIFY(!card->isVisible());
+    QTest::qWait(300);
+    QVERIFY(!card->isVisible());
+    QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
+    // Quiet ending starts a fresh interval rather than an immediate card.
+    rows().first()->findChild<QPushButton *>("quiet")->click();
+    QTRY_VERIFY(schedule->text().startsWith("Next practice in 4:5") ||
+                schedule->text() == "Next practice in 5:00");
+    QVERIFY(!card->isVisible());
+  }
+  void quietHoursRowsAreKeyboardReachable() {
+    QTemporaryDir dir;
+    QSettings prefs(dir.path() + "/settings.ini", QSettings::IniFormat);
+    prefs.setValue("practice/quiet_hours", QStringList{"0000011,22:00,07:00"});
+    prefs.sync();
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.showSettings();
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    QVERIFY(QTest::qWaitForWindowExposed(dashboard));
+    auto *add = dashboard->findChild<QPushButton *>("addQuietHours");
+    add->click();
+    QTest::qWait(1);
+    const auto rows = dashboard->findChildren<QFrame *>("quietHoursRow");
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(QApplication::focusWidget(), rows[1]->findChildren<QPushButton *>().first());
+    QStringList expected;
+    for (auto *row : rows) {
+      const auto buttons = row->findChildren<QPushButton *>();
+      for (int i = 0; i < 7; ++i) {
+        QCOMPARE(buttons[i]->accessibleName(), QLocale(QLocale::English).dayName(i + 1));
+        QVERIFY(buttons[i]->isCheckable());
+        expected << buttons[i]->accessibleName();
+      }
+      const auto edits = row->findChildren<QTimeEdit *>();
+      QCOMPARE(edits[0]->accessibleName(), QString("Quiet hours start"));
+      QCOMPARE(edits[1]->accessibleName(), QString("Quiet hours end"));
+      QCOMPARE(row->findChild<QPushButton *>("quiet")->accessibleName(), QString("Remove quiet hours"));
+      expected << "Quiet hours start" << "Quiet hours end" << "Remove quiet hours";
+    }
+    QVERIFY(rows[0]->findChildren<QPushButton *>()[5]->isChecked());
+    QVERIFY(!rows[0]->findChildren<QPushButton *>()[4]->isChecked());
+    auto hint = [](QFrame *row, const QString &text) {
+      const auto labels = row->findChildren<QLabel *>();
+      return std::any_of(labels.begin(), labels.end(),
+                         [&](QLabel *l) { return l->text() == text; });
+    };
+    QVERIFY(hint(rows[0], "Ends the next day"));
+    QVERIFY(!hint(rows[1], "Ends the next day"));
+    rows[1]->findChildren<QTimeEdit *>()[1]->setTime(QTime(9, 0));
+    QVERIFY(hint(rows[1], "Choose different times"));
+    expected << "Add quiet hours";
+    auto *snooze = dashboard->findChild<QSpinBox *>("snoozeMinutes");
+    snooze->setFocus(Qt::TabFocusReason);
+    auto nameOf = [](QWidget *widget) {
+      if (auto *button = qobject_cast<QAbstractButton *>(widget);
+          button && button->accessibleName().isEmpty())
+        return button->text();
+      return widget ? widget->accessibleName() : QString();
+    };
+    // Tab also steps through the hour and minute sections of a time edit.
+    QStringList reached;
+    for (int i = 0; i < 80 && reached.value(reached.size() - 1) != "Add quiet hours"; ++i) {
+      QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+      const auto name = nameOf(QApplication::focusWidget());
+      if (reached.isEmpty() || reached.last() != name)
+        reached << name;
+    }
+    QCOMPARE(reached, expected);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Space);
+    QTest::qWait(1);
+    QCOMPARE(dashboard->findChildren<QFrame *>("quietHoursRow").size(), 3);
+    // Removing the last row hands focus to Add rather than dropping it.
+    auto *third = dashboard->findChildren<QFrame *>("quietHoursRow").last();
+    QCOMPARE(QApplication::focusWidget(), third->findChildren<QPushButton *>().first());
+    third->findChild<QPushButton *>("quiet")->setFocus();
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Space);
+    QCOMPARE(QApplication::focusWidget(), add);
+  }
+  void startAtLoginToggleWritesTheAutostartEntry() {
+#ifdef Q_OS_WIN
+    QSKIP("Windows uses the HKCU Run key, not an XDG autostart entry.");
+#endif
+    QTemporaryDir config, dir;
+    const auto savedConfig = qgetenv("XDG_CONFIG_HOME");
+    const auto savedAppImage = qgetenv("APPIMAGE");
+    const auto restore = qScopeGuard([&] {
+      for (auto [name, value] : {std::pair{"XDG_CONFIG_HOME", savedConfig},
+                                 std::pair{"APPIMAGE", savedAppImage}})
+        value.isNull() ? qunsetenv(name) : qputenv(name, value);
+    });
+    qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+    qunsetenv("APPIMAGE");
+    const QString entry = config.path() + "/autostart/moji-nook.desktop";
+    Store store(dir.path());
+    App app(store, dir.path());
+    app.start(false, true, {"--data-dir", dir.path() + "/My Nook"});
+    app.showSettings();
+    QWidget *dashboard = nullptr;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window->findChild<QTabWidget *>("dashboardTabs")) dashboard = window;
+    auto *login = dashboard->findChild<QCheckBox *>("startAtLogin");
+    auto *status = dashboard->findChild<QLabel *>("startAtLoginStatus");
+    QVERIFY(login && status);
+    QCOMPARE(login->text(), QString("Start Moji Nook when you log in"));
+    QVERIFY(login->isVisible());
+    QVERIFY(!login->isChecked());
+    login->click();
+    QVERIFY(login->isChecked());
+    QFile file(entry);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(QString::fromUtf8(file.readAll()).contains(
+        "\nExec=" + QCoreApplication::applicationFilePath() + " --tray --data-dir \"" +
+        dir.path() + "/My Nook\"\n"));
+    file.close();
+    login->click();
+    QVERIFY(!QFile::exists(entry));
+    QVERIFY(status->isHidden());
+    // A failed write leaves the box unchecked and says why.
+    QVERIFY(QDir(config.path()).rmdir("autostart"));
+    QFile blocker(config.path() + "/autostart");
+    QVERIFY(blocker.open(QIODevice::WriteOnly));
+    blocker.close();
+    login->click();
+    QVERIFY(!login->isChecked());
+    QVERIFY(!status->isHidden());
+    QVERIFY(status->text().startsWith("Could not change login startup · "));
+    QVERIFY(blocker.remove());
+    login->click();
+    QVERIFY(login->isChecked());
+    QVERIFY(status->isHidden());
+    QVERIFY(QFile::exists(entry));
+    QTemporaryDir demoDir;
+    Store demoStore(demoDir.path());
+    App demo(demoStore, demoDir.path());
+    demo.start(true, true);
+    QList<QCheckBox *> demoToggles;
+    for (auto *window : QApplication::topLevelWidgets())
+      if (window != dashboard && window->findChild<QTabWidget *>("dashboardTabs"))
+        demoToggles << window->findChild<QCheckBox *>("startAtLogin");
+    QCOMPARE(demoToggles.size(), 1);
+    QVERIFY(demoToggles.first()->isHidden());
+    // The entry on disk, not settings.ini, decides the box.
+    QVERIFY(demoToggles.first()->isChecked());
   }
   void sessionClockAndCardProgress() {
     PracticeClock clock;
@@ -2008,6 +2885,7 @@ private slots:
   }
   void cardPlacementIsExplicitAndCompact() {
     Card card;
+    card.setTypeBeforeReveal(false);
     card.setStyleSheet(appStyle());
     Challenge c;
     c.subject = demoSubjects().first();
@@ -2113,6 +2991,29 @@ private slots:
     for (int i = 0; i < bounds.size(); ++i)
       for (int j = i + 1; j < bounds.size(); ++j)
         QVERIFY(!bounds[i].intersects(bounds[j]));
+  }
+  void wanikaniReviewSkipsPracticeForgiveness() {
+    Card card;
+    card.setMissDetails(true);
+    Challenge c;
+    c.subject.kind = "vocabulary";
+    c.subject.characters = "電車";
+    c.subject.meanings = {"Train"};
+    c.subject.readings = {"でんしゃ"};
+    c.subject.readingMnemonic = "A train full of <reading>densha</reading> fans.";
+    c.mode = Mode::Typing;
+    c.reading = true;
+    c.wanikaniReview = true;
+    QSignalSpy graded(&card, &Card::graded);
+    card.present(c, 5);
+    auto *input = card.findChild<QLineEdit *>("readingInput");
+    input->setText("densiya");
+    card.findChild<QPushButton *>("checkReading")->click();
+    // A near miss is wrong at once, can't be overridden, and shows no hints.
+    QCOMPARE(graded.count(), 1);
+    QVERIFY(!graded.last().first().toBool());
+    QVERIFY(!card.findChild<QPushButton *>("countAsCorrect")->isVisible());
+    QVERIFY(!card.findChild<QWidget *>("memoryHelp")->isVisible());
   }
   void wanikaniReviewCardTypesMeaningAndReading() {
     Card card;
@@ -2405,6 +3306,7 @@ private slots:
   }
   void revealAndDismiss() {
     Card card;
+    card.setTypeBeforeReveal(false);
     Challenge c;
     c.subject = demoSubjects().first();
     c.mode = Mode::Recall;

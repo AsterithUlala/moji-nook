@@ -1,3 +1,4 @@
+#include "autostart.h"
 #include "style.h"
 #include "theme.h"
 #include "ui.h"
@@ -20,6 +21,70 @@ public:
     }
     grid->addWidget(panels[selected], 0, 0, Qt::AlignTop);
     grid->setColumnStretch(0, 1);
+  }
+};
+class QuietHoursRow : public QFrame {
+public:
+  QList<QPushButton *> days;
+  ScrollSafeTimeEdit *from = new ScrollSafeTimeEdit, *to = new ScrollSafeTimeEdit;
+  QLabel *hint = label({}, "muted");
+  QPushButton *remove = button("Remove", "quiet");
+  explicit QuietHoursRow(const QuietWindow &window) {
+    setObjectName("quietHoursRow");
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    auto *dayRow = new QHBoxLayout;
+    dayRow->setSpacing(4);
+    for (int i = 0; i < 7; ++i) {
+      const QString name = QLocale(QLocale::English).dayName(i + 1);
+      auto *day = button(name.left(1), "day");
+      day->setCheckable(true);
+      day->setChecked(window.days >> i & 1);
+      day->setAccessibleName(name);
+      day->setToolTip(name);
+      day->setFixedSize(34, 34);
+      days << day;
+      dayRow->addWidget(day);
+      connect(day, &QPushButton::toggled, this, [this] { refreshHint(); });
+    }
+    dayRow->addStretch();
+    layout->addLayout(dayRow);
+    auto *times = new QHBoxLayout;
+    times->setSpacing(8);
+    for (auto [edit, caption, name, time] :
+         {std::tuple{from, "From", "Quiet hours start", window.start},
+          std::tuple{to, "To", "Quiet hours end", window.end}}) {
+      auto *text = label(caption, "muted");
+      text->setWordWrap(false);
+      text->setBuddy(edit);
+      edit->setAccessibleName(name);
+      edit->setTime(time);
+      times->addWidget(text);
+      times->addWidget(edit);
+      connect(edit, &QTimeEdit::timeChanged, this, [this] { refreshHint(); });
+    }
+    times->addWidget(hint, 1);
+    remove->setAccessibleName("Remove quiet hours");
+    times->addWidget(remove);
+    layout->addLayout(times);
+    refreshHint();
+  }
+  QuietWindow window() const {
+    QuietWindow result{0, from->time(), to->time()};
+    for (int i = 0; i < days.size(); ++i)
+      if (days[i]->isChecked())
+        result.days |= 1 << i;
+    return result;
+  }
+
+private:
+  void refreshHint() {
+    const auto w = window();
+    hint->setText(!w.days ? "Choose at least one day"
+                  : w.start == w.end ? "Choose different times"
+                  : w.end < w.start ? "Ends the next day"
+                                    : QString());
   }
 };
 void App::buildDashboard() {
@@ -244,6 +309,24 @@ void App::buildDashboard() {
   form->addWidget(scheduleDivider);
   auto *scheduleHeading = label("Schedule", "controlHeading");
   form->addWidget(scheduleHeading);
+  auto *startAtLogin = new SettingsCheckBox("Start Moji Nook when you log in");
+  startAtLogin->setObjectName("startAtLogin");
+  startAtLogin->setChecked(Autostart::enabled());
+  form->addWidget(startAtLogin);
+  auto *loginStatus = label({}, "startAtLoginStatus");
+  loginStatus->setAccessibleName("Login startup status");
+  loginStatus->hide();
+  form->addWidget(loginStatus);
+  connect(startAtLogin, &QCheckBox::toggled, this, [this, startAtLogin, loginStatus](bool on) {
+    QString error;
+    const bool ok = Autostart::setEnabled(on, loginArgs, &error);
+    loginStatus->setText(ok ? QString() : "Could not change login startup · " + error);
+    loginStatus->setVisible(!ok);
+    if (!ok) {
+      const QSignalBlocker blocker(startAtLogin);
+      startAtLogin->setChecked(Autostart::enabled());
+    }
+  });
   auto *intervalLabel = label("Minutes between sessions", "muted");
   form->addWidget(intervalLabel);
   interval = new ScrollSafeSpinBox;
@@ -286,6 +369,51 @@ void App::buildDashboard() {
     snoozeMinutes = n;
     settings.setValue("snooze_minutes", n);
     refreshSnoozeLabels();
+  });
+  form->addSpacing(8);
+  form->addWidget(label("Quiet hours"));
+  form->addWidget(label("No cards appear during these times. Practice now still works.", "muted"));
+  auto *quietRows = new QVBoxLayout;
+  quietRows->setSpacing(16);
+  form->addLayout(quietRows);
+  auto *addQuiet = button("Add quiet hours", "control");
+  addQuiet->setObjectName("addQuietHours");
+  form->addWidget(addQuiet, 0, Qt::AlignLeft);
+  auto saveQuiet = [this, quietRows] {
+    QuietSchedule schedule;
+    for (int i = 0; i < quietRows->count(); ++i)
+      schedule.windows << static_cast<QuietHoursRow *>(quietRows->itemAt(i)->widget())->window();
+    settings.setValue("practice/quiet_hours", schedule.serialize());
+    clock.quietHours = schedule;
+    clock.refreshQuiet();
+  };
+  auto addQuietRow = [this, quietRows, addQuiet, saveQuiet](const QuietWindow &window) {
+    auto *row = new QuietHoursRow(window);
+    // New widgets join the end of the focus chain; keep the row before Add.
+    QWidget *previous = addQuiet->previousInFocusChain();
+    quietRows->addWidget(row);
+    for (QWidget *next : QList<QWidget *>(row->days.cbegin(), row->days.cend()) +
+                             QList<QWidget *>{row->from, row->to, row->remove, addQuiet}) {
+      QWidget::setTabOrder(previous, next);
+      previous = next;
+    }
+    for (auto *day : row->days)
+      connect(day, &QPushButton::toggled, this, saveQuiet);
+    connect(row->from, &QTimeEdit::timeChanged, this, saveQuiet);
+    connect(row->to, &QTimeEdit::timeChanged, this, saveQuiet);
+    connect(row->remove, &QPushButton::clicked, this, [quietRows, row, saveQuiet] {
+      quietRows->removeWidget(row);
+      row->hide();
+      row->deleteLater();
+      saveQuiet();
+    });
+    return row;
+  };
+  for (const auto &window : clock.quietHours.windows)
+    addQuietRow(window);
+  connect(addQuiet, &QPushButton::clicked, this, [addQuietRow, saveQuiet] {
+    addQuietRow({0x1f, QTime(9, 0), QTime(17, 0)})->days.first()->setFocus(Qt::TabFocusReason);
+    saveQuiet();
   });
   auto *placement = new QFrame;
   placement->setObjectName("placementSettings");
@@ -482,50 +610,77 @@ void App::buildDashboard() {
   persistentPercent->setValue(
       qBound(0, settings.value("persistent_share", 20).toInt(),
              persistentPercent->maximum()));
+  burnedPercent = new ScrollSafeSlider;
+  burnedPercent->setObjectName("burnedShare");
+  burnedPercent->setRange(0, 100 - newestPercent->value() -
+                                 recentPercent->value() -
+                                 persistentPercent->value());
+  burnedPercent->setValue(qBound(0, settings.value("burned_share", 10).toInt(),
+                                 burnedPercent->maximum()));
   recentPercent->setAccessibleName("Recent struggles percentage");
   persistentPercent->setAccessibleName("Persistent trouble percentage");
   form->addWidget(label("Which items?", "muted"));
   sliderRow(form, newestPercent, "Newest 30 learned items");
-  form->addWidget(label("Latest 30 learned items · equal odds.", "muted"));
+  form->addWidget(label("Latest 30 learned items · those due for practice first.", "muted"));
   sliderRow(form, recentPercent, "Recent troubles");
   sliderRow(form, persistentPercent, "Persistent trouble");
+  sliderRow(form, burnedPercent, "Burned items");
+  form->addWidget(label("Items WaniKani no longer reviews.", "muted"));
   auto *broadShare = label({}, "muted");
   form->addWidget(broadShare);
   auto updateMix = [this, broadShare, mixSummary] {
     recentPercent->setMaximum(100 - newestPercent->value());
     persistentPercent->setMaximum(100 - newestPercent->value() -
                                   recentPercent->value());
+    burnedPercent->setMaximum(100 - newestPercent->value() -
+                              recentPercent->value() -
+                              persistentPercent->value());
     settings.setValue("newest_share", newestPercent->value());
     settings.setValue("recent_share", recentPercent->value());
     settings.setValue("persistent_share", persistentPercent->value());
-    broadShare->setText(QString("Broad recall · %1%")
-                            .arg(100 - newestPercent->value() -
-                                 recentPercent->value() -
-                                 persistentPercent->value()));
-    mixSummary->setText(
-        QString("Mix: %1% newest · %2% recent · %3% persistent · %4% broad")
-            .arg(newestPercent->value())
-            .arg(recentPercent->value())
-            .arg(persistentPercent->value())
-            .arg(100 - newestPercent->value() - recentPercent->value() -
-                 persistentPercent->value()));
+    settings.setValue("burned_share", burnedPercent->value());
+    const int broad = 100 - newestPercent->value() - recentPercent->value() -
+                      persistentPercent->value() - burnedPercent->value();
+    broadShare->setText(QString("Broad recall · %1%").arg(broad));
+    mixSummary->setText(QString("Mix: %1% newest · %2% recent · %3% "
+                                "persistent · %4% burned · %5% broad")
+                            .arg(newestPercent->value())
+                            .arg(recentPercent->value())
+                            .arg(persistentPercent->value())
+                            .arg(burnedPercent->value())
+                            .arg(broad));
   };
   connect(newestPercent, &QSlider::valueChanged, this, updateMix);
   connect(recentPercent, &QSlider::valueChanged, this, updateMix);
   connect(persistentPercent, &QSlider::valueChanged, this, updateMix);
+  connect(burnedPercent, &QSlider::valueChanged, this, updateMix);
   updateMix();
   form->addWidget(label("Challenge formats", "muted"));
-  auto *readingRetries = new SettingsCheckBox("Retry alternate kanji readings");
-  readingRetries->setObjectName("readingRetriesEnabled");
-  readingRetries->setChecked(
-      settings.value("reading_retry_enabled", true).toBool());
-  form->addWidget(readingRetries);
-  form->addWidget(
-      label("Known alternate reading → retry, not a miss.", "muted"));
-  connect(readingRetries, &QCheckBox::toggled, this, [this](bool enabled) {
-    settings.setValue("reading_retry_enabled", enabled);
-    applyFeedbackSettings();
-  });
+  auto practiceToggle = [this, form](const QString &text, const QString &name,
+                                     const QString &key, bool fallback,
+                                     const QString &help) {
+    auto *toggle = new SettingsCheckBox(text);
+    toggle->setObjectName(name);
+    toggle->setChecked(settings.value(key, fallback).toBool());
+    form->addWidget(toggle);
+    form->addWidget(label(help, "muted"));
+    connect(toggle, &QCheckBox::toggled, this, [this, key](bool enabled) {
+      settings.setValue(key, enabled);
+      applyFeedbackSettings();
+    });
+  };
+  practiceToggle("Type an answer before revealing", "typeBeforeReveal",
+                 "practice/type_before_reveal", true,
+                 "Recall cards ask for your answer first. You still rate yourself.");
+  practiceToggle("Retry alternate kanji readings", "readingRetriesEnabled",
+                 "reading_retry_enabled", true,
+                 "Known alternate reading → retry, not a miss.");
+  practiceToggle("Second try for near-miss spelling", "nearMissRetry",
+                 "practice/near_miss_retry", true,
+                 "One kana off → one more try before grading.");
+  practiceToggle("Show memory help after a miss", "missDetails",
+                 "practice/miss_details", false,
+                 "Similar-looking kanji and the WaniKani mnemonic.");
   recallPercent = new ScrollSafeSlider;
   typedPercent = new ScrollSafeSlider;
   recallPercent->setObjectName("recallShare");

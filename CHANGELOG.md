@@ -3,6 +3,42 @@
 Moji Nook is an early alpha. Downloads for each version are on the
 [releases page](https://github.com/AsterithUlala/moji-nook/releases).
 
+## 0.3.0-alpha
+
+### Added
+
+- **Start at login.** Turn on **Start Moji Nook when you log in** in
+  **Settings → Practice → Schedule** to open Moji Nook in the tray when you log in.
+- **Quiet hours.** Choose days and times when no cards appear, such as work
+  hours or overnight. A card you haven't clicked steps aside and returns when
+  quiet hours end. **Practice now** still works. See
+  [everyday practice](docs/USAGE.md#everyday-practice).
+- **Smarter word choice.** Moji Nook estimates how well you remember each
+  reading and meaning, starting from your last WaniKani review or Anki interval.
+  - A reading or meaning you answer correctly rests until tomorrow.
+  - A miss comes back after at least 10 minutes, and rests until tomorrow after
+    three misses in a day.
+  - Burned WaniKani items get their own 10% share, with a new **Burned items**
+    slider.
+  - Fragile words lean toward four choices, sturdier words toward typed
+    reading. Your overall format mix is unchanged.
+- **Type before reveal.** Recall cards ask you to type an answer before
+  revealing, then show it next to the correct answer. On by default; turn off
+  **Type an answer before revealing** to reveal without typing.
+- **Near-miss second try.** A typed reading one kana away from an accepted
+  reading gets one more attempt without showing the answer. On by default.
+- **I made a typo.** After a wrong typed reading, count the answer as correct.
+- **Memory help after a miss (optional, off by default).** Shows similar-looking
+  kanji and the WaniKani mnemonic under the answer.
+
+### Changed
+
+- Answers checked by typing count as stronger evidence than self-ratings.
+  Answers rescued by a near-miss second try or a typo override count for less.
+- A typed reading attempt on a recall card is shown in kana.
+- WaniKani review cards keep WaniKani's rules: the near-miss second try, the
+  typo override, and memory help are practice-only.
+
 ## 0.2.0-alpha
 
 ### Added

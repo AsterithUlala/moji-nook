@@ -111,6 +111,35 @@ QString toKana(QString s) {
   return out;
 }
 
+QString mnemonicHtml(const QString &text) {
+  QString html = text.toHtmlEscaped();
+  for (const char *tag : {"radical", "kanji", "vocabulary", "reading", "meaning"}) {
+    html.replace(QString("&lt;%1&gt;").arg(tag), "<b>");
+    html.replace(QString("&lt;/%1&gt;").arg(tag), "</b>");
+  }
+  html.remove("&lt;ja&gt;");
+  html.remove("&lt;/ja&gt;");
+  html.replace('\n', "<br>");
+  return html;
+}
+
+int editDistance(const QString &a, const QString &b) {
+  QVector<int> row(b.size() + 1);
+  for (int j = 0; j <= b.size(); ++j)
+    row[j] = j;
+  for (int i = 1; i <= a.size(); ++i) {
+    int diagonal = row[0];
+    row[0] = i;
+    for (int j = 1; j <= b.size(); ++j) {
+      int old = row[j];
+      row[j] = qMin(qMin(row[j] + 1, row[j - 1] + 1),
+                    diagonal + (a[i - 1] != b[j - 1]));
+      diagonal = old;
+    }
+  }
+  return row.last();
+}
+
 double stageWeight(int s) {
   return s < 1 || s > 9 ? 0
          : s <= 4       ? 4
@@ -118,6 +147,10 @@ double stageWeight(int s) {
          : s == 7       ? 2
          : s == 8       ? 1
                         : .5;
+}
+int srsIntervalHours(int s) {
+  static const int hours[] = {4, 8, 23, 47, 167, 335, 719, 2879};
+  return s >= 1 && s <= 8 ? hours[s - 1] : 0;
 }
 QString stageName(int s) {
   return s <= 4   ? "Apprentice"
@@ -136,15 +169,25 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
                                const QJsonArray &assignments,
                                const QJsonArray &materials, int maxLevel) {
   QHash<int, int> stages;
-  QHash<int, QDateTime> started;
+  QHash<int, QDateTime> started, reviewed;
+  auto time = [](const QJsonValue &v) {
+    return QDateTime::fromString(v.toString(), Qt::ISODateWithMs);
+  };
   for (const auto &v : assignments) {
     auto d = v.toObject()["data"].toObject();
     int stage = d["srs_stage"].toInt();
-    started[d["subject_id"].toInt()] =
-        QDateTime::fromString(d["started_at"].toString(), Qt::ISODateWithMs);
+    const int id = d["subject_id"].toInt();
+    started[id] = time(d["started_at"]);
+    const int interval = srsIntervalHours(stage);
+    const auto available = time(d["available_at"]),
+               burned = time(d["burned_at"]);
+    reviewed[id] = stage == 9 && burned.isValid() ? burned
+                   : interval && available.isValid()
+                       ? available.addSecs(-3600LL * interval)
+                       : started[id];
     if (!d["started_at"].toString().isEmpty() && !d["hidden"].toBool() &&
         stageWeight(stage) > 0)
-      stages[d["subject_id"].toInt()] = stage;
+      stages[id] = stage;
   }
   QHash<int, QStringList> synonyms;
   for (const auto &v : materials) {
@@ -154,17 +197,27 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
   }
   QVector<Subject> result;
   QHash<QString, QHash<QString, QString>> kanjiReadings;
+  // Similar kanji may be unlearned, so resolve them from every cached kanji.
+  QHash<int, RelatedKanji> kanjiById;
   for (const auto &v : subjects) {
     const auto root = v.toObject();
     if (root["object"] != "kanji")
       continue;
     const auto data = root["data"].toObject();
+    RelatedKanji related{data["characters"].toString(), {}, {}};
+    for (const auto &m : data["meanings"].toArray())
+      if (m.toObject()["primary"].toBool())
+        related.meaning = m.toObject()["meaning"].toString();
     for (const auto &r : data["readings"].toArray()) {
       const auto reading = r.toObject();
       kanjiReadings[data["characters"].toString()]
                    [toKana(reading["reading"].toString())] =
                        reading["type"].toString();
+      if (reading["primary"].toBool())
+        related.reading = reading["reading"].toString();
     }
+    if (data["level"].toInt() <= maxLevel)
+      kanjiById.insert(root["id"].toInt(), related);
   }
   for (const auto &v : subjects) {
     auto root = v.toObject();
@@ -179,6 +232,7 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
       continue;
     s.stage = stages[s.id];
     s.startedAt = started.value(s.id);
+    s.reviewedAt = reviewed.value(s.id);
     s.characters = d["characters"].toString();
     s.kanjiReadingTypes = kanjiReadings.value(s.characters);
     s.level = d["level"].toInt();
@@ -211,8 +265,13 @@ QVector<Subject> parseSubjects(const QJsonArray &subjects,
     }
     for (const auto &c : d["component_subject_ids"].toArray())
       s.components.append(c.toInt());
-    for (const auto &c : d["visually_similar_subject_ids"].toArray())
+    for (const auto &c : d["visually_similar_subject_ids"].toArray()) {
       s.similar.append(c.toInt());
+      if (kanjiById.contains(c.toInt()))
+        s.similarKanji.append(kanjiById[c.toInt()]);
+    }
+    s.meaningMnemonic = d["meaning_mnemonic"].toString();
+    s.readingMnemonic = d["reading_mnemonic"].toString();
     auto contexts = d["context_sentences"].toArray();
     if (!contexts.isEmpty()) {
       auto c = contexts[0].toObject();
@@ -235,6 +294,18 @@ bool Challenge::accepts(const QString &text) const {
     if (reading ? toKana(text) == toKana(a)
                 : normalizeMeaning(text) == normalizeMeaning(a))
       return true;
+  return false;
+}
+
+bool Challenge::nearMiss(const QString &text) const {
+  if (!reading || mode != Mode::Typing || accepts(text))
+    return false;
+  const QString kana = toKana(text);
+  for (const auto &r : subject.readings) {
+    const QString accepted = toKana(r);
+    if (accepted.size() >= 2 && editDistance(kana, accepted) == 1)
+      return true;
+  }
   return false;
 }
 

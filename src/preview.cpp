@@ -190,6 +190,7 @@ bool App::saveAnkiPreview(const QString &path) {
   card.present(c, 5);
   qApp->processEvents();
   ok = card.grab().save(path + "/anki-front.png") && ok;
+  card.findChild<QLineEdit *>("readingInput")->setText(c.subject.reading());
   card.findChild<QPushButton *>("revealAnswer")->click();
   qApp->processEvents();
   ok = card.grab().save(path + "/anki-revealed.png") && ok;
@@ -232,6 +233,9 @@ bool App::savePreview(const QString &path) {
   heartbeat.stop();
   autoSync.stop();
   demoMode = true;
+  auto *startAtLogin = dashboard.findChild<QCheckBox *>("startAtLogin");
+  const bool savedStartAtLogin = !startAtLogin->isHidden();
+  startAtLogin->hide();
   card.setReducedMotion(true);
   recap.setReducedMotion(true);
   previewCard.setReducedMotion(true);
@@ -287,6 +291,7 @@ bool App::savePreview(const QString &path) {
     card.present(c, 5);
     qApp->processEvents();
     ok = card.grab().save(path + QString("/theme-%1-reveal.png").arg(i)) && ok;
+    card.findChild<QLineEdit *>("readingInput")->setText("nihon");
     card.findChild<QPushButton *>("revealAnswer")->click();
     capture(card, QString("theme-%1-recall-revealed").arg(i));
     c.mode = Mode::Typing;
@@ -301,7 +306,11 @@ bool App::savePreview(const QString &path) {
     card.present(c, 5);
     card.findChild<QLineEdit *>("readingInput")->setText("にちほん");
     card.findChild<QPushButton *>("checkReading")->click();
+    capture(card, QString("theme-%1-near-miss").arg(i));
+    card.findChild<QPushButton *>("checkReading")->click();
     capture(card, QString("theme-%1-missed").arg(i));
+    card.findChild<QPushButton *>("countAsCorrect")->click();
+    capture(card, QString("theme-%1-typo-override").arg(i));
 
     Challenge choice = c;
     choice.mode = Mode::Choice;
@@ -327,6 +336,22 @@ bool App::savePreview(const QString &path) {
     card.findChild<QPushButton *>("checkReading")->click();
     capture(card, QString("theme-%1-reading-retry").arg(i));
 
+    Challenge memory = retry;
+    memory.subject.similarKanji = {{"目", "Eye", "もく"}, {"白", "White", "はく"},
+                                   {"旧", "Former", "きゅう"}};
+    memory.subject.readingMnemonic =
+        "Synthetic preview mnemonic: the <kanji>sun</kanji> greets you each "
+        "morning with a cheerful “<reading>にち</reading>”.";
+    card.setMissDetails(true);
+    card.present(memory, 5);
+    card.findChild<QLineEdit *>("readingInput")->setText("めい");
+    card.findChild<QPushButton *>("checkReading")->click();
+    qApp->processEvents();
+    card.findChild<QScrollArea *>("cardScroll")
+        ->ensureWidgetVisible(card.findChild<QWidget *>("memoryHelp"), 0, 0);
+    capture(card, QString("theme-%1-memory-help").arg(i));
+    card.setMissDetails(settings.value("practice/miss_details", false).toBool());
+
     Challenge local = c;
     local.mode = Mode::Recall;
     local.subject.id = -1;
@@ -341,6 +366,7 @@ bool App::savePreview(const QString &path) {
         {"frequency", "250"}};
     card.present(local, 5);
     capture(card, QString("theme-%1-anki-front").arg(i));
+    card.findChild<QLineEdit *>("readingInput")->setText(local.subject.reading());
     card.findChild<QPushButton *>("revealAnswer")->click();
     capture(card, QString("theme-%1-anki-revealed").arg(i));
     card.findChild<QPushButton *>("ankiShowDetails")->click();
@@ -613,6 +639,7 @@ bool App::savePreview(const QString &path) {
   ok = settings.status() == QSettings::NoError && ok;
   applyFeedbackSettings();
   demoMode = savedDemoMode;
+  startAtLogin->setVisible(savedStartAtLogin);
   if (savedVisible)
     dashboard.show();
   if (savedHeartbeat)

@@ -9,7 +9,7 @@ fitting extra practice into the gaps in your day without stealing focus.
 Practice never changes your WaniKani progress. If you want, an optional review
 mode lets you clear your WaniKani reviews on the same cards.
 
-> **Early alpha (0.2.0).** Expect rough edges. Tested on Linux x86_64 with KDE
+> **Early alpha (0.3.0).** Expect rough edges. Tested on Linux x86_64 with KDE
 > Plasma on Wayland. See [Get started](#get-started) and please
 > [report problems](https://github.com/AsterithUlala/moji-nook/issues).
 
@@ -24,7 +24,8 @@ Nook itself waits in the system tray.*
 - **Your WaniKani words:** connect once and Moji Nook brings in the kanji and
   vocabulary you have already learned.
 - **Three ways to answer:** type a reading, pick from multiple choice, or
-  rate your own recall. Readings and meanings are practiced separately.
+  type your answer before rating your own recall. Readings and meanings are
+  practiced separately.
 - **Offline pronunciation:** hear Japanese read aloud on the card without a network connection.
 - **Extra attention where it helps:** words you have found difficult get more attention in the mix.
 - **A record of practice:** each word earns a tile once you have recalled it on
@@ -50,6 +51,8 @@ Nook itself waits in the system tray.*
 - **Easy to put aside:** dismiss a session, pause reminders, or snooze for
   your chosen time (30 minutes by default). Busy time never builds a backlog,
   and a dismissed card is not counted as a wrong answer.
+- **Quiet hours:** choose days and times with no cards, such as work hours or
+  overnight. **Practice now** still works.
 - **On demand:** start a session any time from the system tray.
 
 Moji Nook runs in the system tray. Closing the dashboard leaves it running; use

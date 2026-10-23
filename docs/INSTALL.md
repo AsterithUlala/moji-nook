@@ -1,6 +1,6 @@
 # Install Moji Nook
 
-Moji Nook is an early alpha (0.2.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
+Moji Nook is an early alpha (0.3.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
 has an Arch package, an AppImage for other Linux distributions, and an
 experimental Windows zip. You can also build from source. Build commands below start from the repository
 directory after cloning.
@@ -162,11 +162,14 @@ If `~/.local/bin` is on your `PATH`, the installed app can be launched as `moji-
 
 On Linux, installation includes a desktop launcher and scalable/raster app icons.
 Keep `~/.local/bin` on your `PATH` so the launcher can find the executable.
-Installation does not enable login startup.
-To start Moji Nook at login on KDE Plasma, add the installed executable in
-**System Settings → Autostart**, with `--tray` as its argument. Other desktops
-have their own startup settings. Use the path to your installed executable;
-the [Moji Nook app icon](../assets/brand/moji-nook-128.png) is available for a custom launcher.
+Installation does not enable login startup. To start Moji Nook in the tray
+when you log in, turn on **Start Moji Nook when you log in** in
+**Settings → Practice → Schedule**. Moji Nook then adds a standard autostart
+entry, `~/.config/autostart/moji-nook.desktop`, that runs the current
+executable or AppImage with `--tray`. After moving or replacing the AppImage,
+turn the setting off and on again so the entry points at the new file. If your
+desktop ignores autostart entries, add the executable with `--tray` in its own
+startup settings.
 
 ## Update an existing checkout
 

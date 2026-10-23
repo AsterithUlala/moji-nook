@@ -2,16 +2,18 @@ Moji Nook is an early alpha. Please [report problems](https://github.com/Asterit
 
 ## What's new
 
-- **WaniKani review mode (optional, off by default).** Turn on
-  **Settings → WaniKani → Do WaniKani reviews here** and your due WaniKani
-  reviews come first on the cards. You type every answer, Moji Nook grades it by
-  WaniKani's rules, and finished reviews are submitted to WaniKani. It needs a
-  token with `reviews:create` and never starts lessons. See
-  [review mode](https://github.com/AsterithUlala/moji-nook/blob/main/docs/USAGE.md#do-wanikani-reviews-in-moji-nook-optional).
-- Fixes for reminders that stopped, a double-click answering the next card,
-  snooze resets, speech that got stuck on "Preparing audio…", CSV export, and
-  several layout issues.
-- The Arch package now depends on `qt6-svg`.
+- **Start at login** and **quiet hours.** Open Moji Nook in the tray when you
+  log in, and choose days and times when no cards appear. Both are in
+  **Settings → Practice → Schedule**.
+- **Smarter word choice.** A reading or meaning you answer correctly rests until
+  tomorrow, a miss comes back after at least 10 minutes, and burned WaniKani
+  items get their own share.
+- **Type before reveal.** Recall cards ask for a typed answer first, then show
+  it next to the correct one.
+- **Kinder spelling checks.** A typed reading one kana off gets a second try,
+  and **I made a typo** counts a slip as correct.
+- **Memory help after a miss (optional).** Similar-looking kanji and the
+  WaniKani mnemonic, under the answer.
 
 Full list: [CHANGELOG.md](https://github.com/AsterithUlala/moji-nook/blob/main/CHANGELOG.md).
 

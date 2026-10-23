@@ -37,17 +37,27 @@ int main(int argc, char **argv) {
   };
   Evidence evidence;
   measure("evidence", [&] { evidence = store.evidence(); });
+  QVector<GradedAttempt> attempts;
+  measure("graded_attempts", [&] { attempts = store.gradedAttempts(); });
+  const auto now = QDateTime::currentDateTime();
+  Memory memory;
+  measure("recall_memory", [&] {
+    memory = estimateMemory(pool, attempts, now, QDate::currentDate());
+  });
   Picker picker(42);
   const auto recent = store.recentSubjects();
   Challenge challenge;
   measure("pick_recall", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 100, 0, {}, 30);
+    challenge = picker.next(pool, recent, evidence, memory,
+                            {30, 25, 20, 10, 100, 0}, now);
   });
   measure("pick_typed", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 0, 100, {}, 30);
+    challenge = picker.next(pool, recent, evidence, memory,
+                            {30, 25, 20, 10, 0, 100}, now);
   });
   measure("pick_choice", [&] {
-    challenge = picker.next(pool, {}, recent, evidence, 25, 20, 0, 0, {}, 30);
+    challenge = picker.next(pool, recent, evidence, memory,
+                            {30, 25, 20, 10, 0, 0}, now);
   });
   measure("record", [&] { store.record(challenge, true, 100); });
   measure("overview", [&] { store.statsHtml(pool); });

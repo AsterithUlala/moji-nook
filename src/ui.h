@@ -8,6 +8,7 @@
 #include "wanikani_reviews.h"
 #include "speech.h"
 #include "progression_popup.h"
+#include "quiet_hours.h"
 #include "theme.h"
 #include <QtWidgets>
 
@@ -22,15 +23,27 @@ public:
   int intervalMs = 300000;
   int sessionSize = 2, sessionTotal = 2, position = 1;
   QString sessionId;
-  bool pending = false, paused = false;
+  // Pause is the learner's choice and quiet follows quietHours; either one
+  // holds scheduled sessions without touching the other.
+  bool pending = false, paused = false, quiet = false;
   // The running timer is a snooze, not the regular interval.
   bool snoozed = false;
-  void request();
+  QDateTime snoozeUntil;
+  bool explicitSession = true;
+  QuietSchedule quietHours;
+  void request(bool explicitRequest = true);
+  void offer();
   void complete();
   void advance();
   void setPaused(bool value);
+  void snooze(int ms);
+  void refreshQuiet();
 signals:
   void due();
+  void quietChanged(bool quiet);
+
+private:
+  void startInterval();
 };
 
 class Card : public QWidget {
@@ -43,10 +56,14 @@ public:
   void applyTheme(int index);
   void setReducedMotion(bool reduced);
   void setReadingRetries(bool enabled) { readingRetries = enabled; }
+  void setNearMissRetries(bool enabled) { nearMissRetries = enabled; }
+  void setTypeBeforeReveal(bool enabled) { typeBeforeReveal = enabled; }
+  void setMissDetails(bool enabled) { missDetails = enabled; }
   void setAnkiAudio(bool enabled, int volume, bool autoplay = true);
   void setSpeech(JapaneseSpeech *engine, bool enabled, bool autoplay,
                  bool preferRecorded);
   void setProgressTile(const std::optional<ProgressTile> &tile);
+  bool isEngaged() const { return engaged; }
   void showReviewNote(const QString &text);
   Challenge challenge;
 signals:
@@ -62,16 +79,18 @@ protected:
 private:
   QLabel *meta, *challengeType, *supplement, *characters, *frontContext,
       *prompt, *answer, *context, *feedback, *hint, *kana, *submitted,
-      *answerCaption, *missIcon;
+      *submittedCaption, *answerCaption, *missIcon;
   QLineEdit *input;
   QPushButton *reveal, *check, *remember, *miss, *done, *dismiss,
-      *exampleToggle, *listen;
+      *exampleToggle, *listen, *typo;
   QLabel *voiceCaption;
   QLabel *wordProgress, *wordKind;
   ChallengeMark *challengeMark;
   QScrollArea *cardScroll;
   QWidget *cardContent, *submittedRow;
   QWidget *choiceArea;
+  QFrame *memoryHelp;
+  QLabel *similarCaption, *similarKanji, *mnemonicCaption, *mnemonic;
   QVBoxLayout *choiceLayout;
   QElapsedTimer active, presented;
   bool engaged = false, resolved = false, pending = false;
@@ -82,7 +101,10 @@ private:
   QMetaObject::Connection screenGeometryConnection;
   CardAccent *accent;
   bool reducedMotion = true;
-  bool readingRetries = true;
+  bool readingRetries = true, nearMissRetries = true;
+  bool typeBeforeReveal = true, missDetails = false;
+  // Snapshot per card so a settings change cannot strand a shown card.
+  bool attemptFirst = false;
   QLabel *readingWarning, *reviewNote;
   AnkiDetails *ankiDetails;
   QPointer<JapaneseSpeech> speech;
@@ -91,6 +113,10 @@ private:
   bool answerVisible = false;
   int motionEpoch = 0;
   void showAnswer();
+  void revealAnswer();
+  void showSubmitted(const QString &text, const QString &caption, bool missed);
+  bool showMemoryHelp();
+  void stampGrade();
   void speakAnswer();
   void grade(bool correct, const QString &response);
   void fitCard();
@@ -102,7 +128,7 @@ class App : public QObject {
   Q_OBJECT
 public:
   App(Store &store, const QString &dataDir, QObject *parent = nullptr);
-  void start(bool demo, bool trayOnly);
+  void start(bool demo, bool trayOnly, const QStringList &loginArgs = {});
   void showDashboard();
   bool savePreview(const QString &directory);
   bool saveAnkiPreview(const QString &directory);
@@ -119,6 +145,8 @@ private:
   AnkiSource anki;
   AnkiPanel *ankiPanel;
   Picker picker;
+  // Appended per card so selection replays full history without rereading it.
+  QVector<GradedAttempt> graded;
   QVector<Subject> pool;
   PracticeClock clock;
   Card card;
@@ -164,14 +192,16 @@ private:
   QSpinBox *interval;
   QSpinBox *sessionCount;
   QSpinBox *snoozeLength;
-  QSlider *newestPercent, *recentPercent, *persistentPercent, *recallPercent,
-      *typedPercent;
+  QSlider *newestPercent, *recentPercent, *persistentPercent, *burnedPercent,
+      *recallPercent, *typedPercent;
   QComboBox *corner, *monitor, *theme, *practiceSource;
   QPushButton *syncButton;
   QTimer heartbeat, autoSync;
   QTimer statsRefresh;
   QVector<bool> dirtyTabs = QVector<bool>(6, true);
   bool demoMode = false;
+  // Extra arguments for login startup, such as an explicit --data-dir.
+  QStringList loginArgs;
   QString readToken() const;
   bool saveToken(const QString &token);
   void refreshPool();
@@ -231,29 +261,29 @@ protected:
     painter.drawPath(chevron);
   }
 };
-class ScrollSafeSpinBox : public QSpinBox {
+template <class Stepper> class ScrollSafeStepper : public Stepper {
 public:
-  explicit ScrollSafeSpinBox(QWidget *parent = nullptr) : QSpinBox(parent) {
+  explicit ScrollSafeStepper(QWidget *parent = nullptr) : Stepper(parent) {
     // Style sheet padding does not reach the inner editor; inset the text
     // to line up with the neighboring combo boxes.
-    lineEdit()->setTextMargins(7, 0, 0, 0);
+    this->lineEdit()->setTextMargins(7, 0, 0, 0);
   }
 
 protected:
   void wheelEvent(QWheelEvent *event) override { event->ignore(); }
   void paintEvent(QPaintEvent *event) override {
-    QSpinBox::paintEvent(event);
+    Stepper::paintEvent(event);
     QStyleOptionSpinBox option;
-    initStyleOption(&option);
-    const QRect up = style()->subControlRect(
+    this->initStyleOption(&option);
+    const QRect up = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, this);
-    const QRect down = style()->subControlRect(
+    const QRect down = this->style()->subControlRect(
         QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxDown, this);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QColor color = isEnabled()
-        ? palette().color(QPalette::Text)
-        : palette().color(QPalette::Disabled, QPalette::Text);
+    const QColor color = this->isEnabled()
+        ? this->palette().color(QPalette::Text)
+        : this->palette().color(QPalette::Disabled, QPalette::Text);
     painter.setPen(QPen(color, 1.5, Qt::SolidLine, Qt::RoundCap,
                          Qt::RoundJoin));
     auto chevron = [&painter](const QRect &button, bool upward) {
@@ -271,6 +301,8 @@ protected:
     chevron(down, false);
   }
 };
+using ScrollSafeSpinBox = ScrollSafeStepper<QSpinBox>;
+using ScrollSafeTimeEdit = ScrollSafeStepper<QTimeEdit>;
 
 QVector<Subject> demoSubjects();
 QString appStyle(int theme = defaultTheme);
@@ -278,5 +310,6 @@ QIcon appIcon();
 QIcon brandMark(int theme = defaultTheme);
 QString syncAgeText(const QDateTime &last,
                     const QDateTime &now = QDateTime::currentDateTimeUtc());
+QString quietHoursText(const QuietSchedule &schedule, const QDateTime &now);
 bool automaticSyncDue(const QDateTime &lastSuccess,
                       const QDateTime &lastAttempt, const QDateTime &now);

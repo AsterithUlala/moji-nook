@@ -9,7 +9,7 @@ struct ChartDay {
 };
 struct ChartData {
   QVector<ChartDay> days;
-  QVector<int> mix = {0, 0, 0, 0, 0};
+  QVector<int> mix = QVector<int>(6);
   QVector<int> hourTotal = QVector<int>(6), hourCorrect = QVector<int>(6);
   QVector<int> formatTotal = QVector<int>(3), formatCorrect = QVector<int>(3);
   QVector<int> stageTotal = QVector<int>(5), stageCorrect = QVector<int>(5);

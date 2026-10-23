@@ -184,8 +184,9 @@ jobs:
             # QtTest output can be lost under ctest on Windows; rerun failures to a log.
             foreach ($test in Get-ChildItem build/moji_nook_*_tests.exe) {
               $log = Join-Path $env:RUNNER_TEMP "$($test.BaseName).txt"
-              & $test.FullName -platform offscreen -o "$log,txt"
-              if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String -NotMatch '^PASS' }
+              # QT_QPA_PLATFORM is offscreen already; GUI-less suites reject -platform.
+              & $test.FullName -o "$log,txt"
+              if ($LASTEXITCODE -ne 0 -and (Test-Path $log)) { Get-Content $log | Select-String -NotMatch '^PASS' }
             }
             exit 1
           }
