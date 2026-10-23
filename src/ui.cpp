@@ -150,6 +150,9 @@ App::App(Store &s, const QString &path, QObject *parent)
                       ? outcome
                       : -1;
               clock.advance();
+              // Quiet hours can end a session the card expected to continue.
+              if (!clock.pending && !ordinaryFinish)
+                card.hide();
             }
             if (!clock.pending) {
               const auto notices = std::exchange(pendingProgressNotices, {});
@@ -384,8 +387,7 @@ void App::snoozePractice() {
   recap.dismiss();
   pauseAction->setChecked(false);
   card.close();
-  clock.timer.start(snoozeMinutes * 60000);
-  clock.snoozed = true;
+  clock.snooze(snoozeMinutes * 60000);
   refreshHomeState();
 }
 void App::refreshSnoozeLabels() {
@@ -547,8 +549,9 @@ void App::showCard() {
   }
   const auto &source = useAnki ? ankiPool : wkPool;
   const auto now = QDateTime::currentDateTime();
-  const auto memory =
-      estimateMemory(source, store.gradedAttempts(), now, QDate::currentDate());
+  graded += store.gradedAttempts(graded.isEmpty() ? QDateTime()
+                                                  : graded.last().at);
+  const auto memory = estimateMemory(source, graded, now, QDate::currentDate());
   const SelectionMix mix{newestPercent->value(),
                          recentPercent->value(),
                          persistentPercent->value(),

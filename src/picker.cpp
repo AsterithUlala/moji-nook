@@ -213,9 +213,16 @@ Challenge Picker::next(const QVector<Subject> &pool, const QList<int> &recent,
     bucket = &buckets.last();
     pick = draw(bucket->weight, true);
   }
+  // Every reading rests but a meaning doesn't: change format, not the rule.
+  if (!pick && c.mode == Mode::Typing) {
+    c.mode = Mode::Recall;
+    pick = draw(bucket->weight, true);
+  }
   // Everything is resting: practice whatever needs it most.
-  if (!pick)
+  if (!pick) {
     pick = draw([](const Skill &) { return 1.; }, false);
+    c.event["rest_fallback"] = true;
+  }
   c.subject = *pick->subject;
   c.reading = pick->reading;
   c.selectionReason = bucket->reason;

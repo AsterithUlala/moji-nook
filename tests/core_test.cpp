@@ -505,6 +505,19 @@ private slots:
                                tomorrow, tomorrow.date())
                     .value(skillKey(1, false)),
                 tomorrow, tomorrow.date()));
+
+    // A miss on a sturdy item must not read as a fresh success.
+    for (int stage : {5, 8, 9}) {
+      Subject sturdy = s;
+      sturdy.stage = stage;
+      sturdy.reviewedAt = now.addDays(-2);
+      auto miss = at(0);
+      miss.at = now.addSecs(-20 * 60);
+      const auto lapsed = estimateMemory({sturdy}, {miss}, now, today)
+                              .value(skillKey(1, false));
+      QVERIFY(recallProbability(lapsed, now) <= 0.5);
+      QVERIFY(!rested(lapsed, now, today));
+    }
   }
   void gradedAttemptStrength() {
     QTemporaryDir dir;
@@ -524,6 +537,8 @@ private slots:
          json({{"grading", "checked"}, {"overridden", true}}), false},
         {"Four choices", 0,
          json({{"grading", "checked"}, {"overridden", false}}), true},
+        {"Typed reading", 1,
+         json({{"grading", "checked"}, {"near_miss_retry", true}}), false},
         {"Recall", 1, json({{"grading", "self-rated"}}), false},
         {"Recall", 1,
          json({{"grading", "self-rated"}, {"recall_attempt_matched", true}}),
@@ -555,10 +570,12 @@ private slots:
     // Inserted newest first; results come back oldest first.
     for (int i = 0; i < rows.size(); ++i)
       QVERIFY(insert(i + 1, rows[i], now.addSecs(-i * 60)));
-    QVERIFY(insert(99, rows[0], now.addDays(-31)));
+    // Burned items rely on old practice, so history has no age limit.
+    QVERIFY(insert(99, rows[0], now.addDays(-400)));
     const auto graded = store.gradedAttempts();
-    QCOMPARE(graded.size(), rows.size() - 1);
-    for (const auto &a : graded) {
+    QCOMPARE(graded.size(), rows.size()); // One row is ungraded.
+    QCOMPARE(graded.first().subjectId, 99);
+    for (const auto &a : graded.mid(1)) {
       const int i = a.subjectId - 1;
       QCOMPARE(a.strong, rows[i].strong);
       QCOMPARE(a.correct, rows[i].correct.toInt() == 1);
@@ -567,7 +584,7 @@ private slots:
                now.addSecs(-i * 60).toString(Qt::ISODateWithMs));
       QCOMPARE(a.localDay, now.addSecs(-i * 60).toLocalTime().date());
     }
-    QCOMPARE(graded.first().subjectId, rows.size() - 1);
+    QCOMPARE(graded[1].subjectId, rows.size() - 1);
     Challenge c;
     c.subject.id = 50;
     c.mode = Mode::Typing;
@@ -576,10 +593,11 @@ private slots:
     QVERIFY(store.record(c, true, 100));
     c.event.remove("overridden");
     QVERIFY(store.record(c, true, 100));
-    const auto recorded = store.gradedAttempts();
-    QCOMPARE(recorded.size(), graded.size() + 2);
-    QVERIFY(!recorded[recorded.size() - 2].strong);
+    const auto recorded = store.gradedAttempts(graded.last().at);
+    QCOMPARE(recorded.size(), 2);
+    QVERIFY(!recorded.first().strong);
     QVERIFY(recorded.last().strong);
+    QVERIFY(store.gradedAttempts(recorded.last().at).isEmpty());
   }
   void kana() {
     QCOMPARE(toKana("gakkou"), QString("がっこう"));
@@ -883,6 +901,24 @@ private slots:
     }
     QCOMPARE(seen.size(), 9);
   }
+  void pickerTypingSwitchesFormatWhenReadingsRest() {
+    Subject s;
+    s.id = 1;
+    s.stage = 1;
+    s.meanings = {"One"};
+    s.readings = {"いち"};
+    const Memory memory{
+        {skillKey(1, true), {1, noon.addDays(-1), noon.date()}},
+        {skillKey(1, false), {1, noon.addDays(-1)}}};
+    Picker picker(83);
+    for (int i = 0; i < 200; ++i) {
+      const auto c =
+          picker.next({s}, {}, {}, memory, {0, 0, 0, 0, 0, 100}, noon);
+      QCOMPARE(c.mode, Mode::Recall);
+      QVERIFY(!c.reading);
+      QVERIFY(!c.event["rest_fallback"].toBool());
+    }
+  }
   void pickerFallsBackWhenEverythingRests() {
     QVector<Subject> pool;
     for (int i = 1; i <= 3; ++i) {
@@ -905,6 +941,7 @@ private slots:
           picker.next(pool, {1}, {}, memory, {0, 0, 0, 0, 100, 0}, noon);
       QVERIFY(c.subject.id != 1);
       QCOMPARE(c.selectionReason, QString("Broad recall"));
+      QVERIFY(c.event["rest_fallback"].toBool());
       needy += c.subject.id == 3;
     }
     // p = 0.5 outweighs p = 0.96 when only need decides.

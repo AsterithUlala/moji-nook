@@ -147,8 +147,10 @@ with your answers here:
   reading.
 
 If every word in your pool is resting, Moji Nook still shows a card and picks
-the word you are most likely to have forgotten. The estimate uses your last 30
-days of answers here.
+the word you are most likely to have forgotten. The estimate uses all of your
+answers here since the item's last WaniKani review. An answer that needed a
+near-miss second try, a typo override, or an untyped self-rating counts for
+less than a first-try checked answer.
 
 Kanji prompts identify the requested primary reading type when available.
 A known alternate kanji reading can receive a retry prompt instead of an

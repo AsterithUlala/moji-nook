@@ -8,7 +8,7 @@ static constexpr struct {
   double burnedIntervalHours = 8760;
   double strongGrowth = 2.0, weakGrowth = 0.8, missShrink = 0.35;
   double minHalfLifeDays = 10.0 / (24 * 60), maxHalfLifeDays = 5 * 365.0;
-  double unknownRecall = 0.5;
+  double unknownRecall = 0.5, lapsedRecall = 0.5;
   int restMissesPerDay = 3;
   qint64 restAfterMissSecs = 10 * 60;
   double restAboveRecall = 0.95;
@@ -30,7 +30,8 @@ double recallProbability(const SkillMemory &m, const QDateTime &now) {
   if (!m.lastSeen.isValid() || m.halfLifeDays <= 0)
     return kRecall.unknownRecall;
   const double days = qMax<qint64>(0, m.lastSeen.msecsTo(now)) / 86400000.0;
-  return std::exp2(-days / m.halfLifeDays);
+  const double p = std::exp2(-days / m.halfLifeDays);
+  return m.lapsed ? qMin(p, kRecall.lapsedRecall) : p;
 }
 
 bool rested(const SkillMemory &m, const QDateTime &now, const QDate &today) {
@@ -75,6 +76,7 @@ Memory estimateMemory(const QVector<Subject> &pool,
         clampHalfLife(it->halfLifeDays *
                       (a->correct ? 1 + growth * (1 - p) : kRecall.missShrink));
     it->lastSeen = a->at;
+    it->lapsed = !a->correct;
     if (a->correct) {
       it->lastCorrectDay = a->localDay;
     } else {

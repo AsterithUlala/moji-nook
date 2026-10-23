@@ -2468,6 +2468,33 @@ private slots:
     clock.refreshQuiet();
     QVERIFY(clock.timer.isActive());
   }
+  void quietHoursEndScheduledSessionsAfterTheCardInUse() {
+    PracticeClock clock;
+    clock.intervalMs = 3600000;
+    clock.sessionSize = 3;
+    QSignalSpy due(&clock, &PracticeClock::due);
+    clock.offer();
+    QCOMPARE(due.count(), 1);
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.advance();
+    QCOMPARE(due.count(), 1);
+    QVERIFY(!clock.pending);
+    QVERIFY(!clock.timer.isActive());
+  }
+  void snoozeOutlastsQuietHours() {
+    PracticeClock clock;
+    clock.intervalMs = 60000;
+    clock.quietHours.windows = {quietAround(60000, 3600000)};
+    clock.refreshQuiet();
+    clock.snooze(30 * 60000);
+    QVERIFY(!clock.timer.isActive());
+    clock.quietHours = {};
+    clock.refreshQuiet();
+    QVERIFY(clock.timer.isActive());
+    QVERIFY(clock.snoozed);
+    QVERIFY(clock.timer.remainingTime() > 29 * 60000);
+  }
   void quietHoursTextNamesTheEnd() {
     const QDateTime friday(QDate(2026, 10, 23), QTime(23, 0));
     const QLocale locale;
@@ -2574,11 +2601,11 @@ private slots:
     add->click();
     coverNow(rows().first());
     QVERIFY(card->isVisible());
-    for (int position = 1; position <= 2; ++position) {
-      QVERIFY(card->isVisible());
-      answer(card);
-    }
+    // The scheduled session ends with the card in use; card 2 never appears.
+    answer(card);
     QTRY_VERIFY(!card->isVisible());
+    QTest::qWait(300);
+    QVERIFY(!card->isVisible());
     QTRY_VERIFY(schedule->text().startsWith("Quiet hours until "));
     // Quiet ending starts a fresh interval rather than an immediate card.
     rows().first()->findChild<QPushButton *>("quiet")->click();

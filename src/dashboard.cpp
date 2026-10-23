@@ -601,7 +601,7 @@ void App::buildDashboard() {
   persistentPercent->setAccessibleName("Persistent trouble percentage");
   form->addWidget(label("Which items?", "muted"));
   sliderRow(form, newestPercent, "Newest 30 learned items");
-  form->addWidget(label("Latest 30 learned items · equal odds.", "muted"));
+  form->addWidget(label("Latest 30 learned items · those due for practice first.", "muted"));
   sliderRow(form, recentPercent, "Recent troubles");
   sliderRow(form, persistentPercent, "Persistent trouble");
   sliderRow(form, burnedPercent, "Burned items");

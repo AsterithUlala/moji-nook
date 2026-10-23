@@ -74,6 +74,9 @@ struct SkillMemory {
   QDate lastCorrectDay;
   int missesToday = 0;
   QDateTime lastMissAt;
+  // The last graded answer was a miss, so the memory is not as fresh as
+  // lastSeen suggests.
+  bool lapsed = false;
 };
 using Memory = QHash<QString, SkillMemory>;
 Memory estimateMemory(const QVector<Subject> &pool,
@@ -99,7 +102,8 @@ public:
   bool exportCsv(const QString &path) const;
   bool observeReviews(const QJsonArray &rows, const QString &at);
   Evidence evidence() const;
-  QVector<GradedAttempt> gradedAttempts() const;
+  // Graded attempts recorded after `after` (all of them when invalid).
+  QVector<GradedAttempt> gradedAttempts(const QDateTime &after = {}) const;
   QString insightsHtml(const QVector<Subject> &pool) const;
   QString historyHtml(int page = 0) const;
 };

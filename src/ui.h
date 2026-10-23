@@ -27,12 +27,15 @@ public:
   bool pending = false, paused = false, quiet = false;
   // The running timer is a snooze, not the regular interval.
   bool snoozed = false;
+  QDateTime snoozeUntil;
+  bool explicitSession = true;
   QuietSchedule quietHours;
-  void request();
+  void request(bool explicitRequest = true);
   void offer();
   void complete();
   void advance();
   void setPaused(bool value);
+  void snooze(int ms);
   void refreshQuiet();
 signals:
   void due();
@@ -139,6 +142,8 @@ private:
   AnkiSource anki;
   AnkiPanel *ankiPanel;
   Picker picker;
+  // Appended per card so selection replays full history without rereading it.
+  QVector<GradedAttempt> graded;
   QVector<Subject> pool;
   PracticeClock clock;
   Card card;
