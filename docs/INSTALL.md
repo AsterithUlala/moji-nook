@@ -1,6 +1,6 @@
 # Install Moji Nook
 
-Moji Nook is an early alpha (0.2.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
+Moji Nook is an early alpha (0.3.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
 has an Arch package, an AppImage for other Linux distributions, and an
 experimental Windows zip. You can also build from source. Build commands below start from the repository
 directory after cloning.

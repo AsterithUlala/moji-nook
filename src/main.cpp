@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
   application.setApplicationDisplayName("Moji Nook");
   application.setDesktopFileName("moji-nook");
   application.setOrganizationName("MojiNook");
-  application.setApplicationVersion("0.2.0-alpha");
+  application.setApplicationVersion("0.3.0-alpha");
   application.setQuitOnLastWindowClosed(false);
   application.setStyle("Fusion");
   application.setStyleSheet(appStyle());

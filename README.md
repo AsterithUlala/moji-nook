@@ -9,7 +9,7 @@ fitting extra practice into the gaps in your day without stealing focus.
 Practice never changes your WaniKani progress. If you want, an optional review
 mode lets you clear your WaniKani reviews on the same cards.
 
-> **Early alpha (0.2.0).** Expect rough edges. Tested on Linux x86_64 with KDE
+> **Early alpha (0.3.0).** Expect rough edges. Tested on Linux x86_64 with KDE
 > Plasma on Wayland. See [Get started](#get-started) and please
 > [report problems](https://github.com/AsterithUlala/moji-nook/issues).
 

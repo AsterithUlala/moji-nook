@@ -60,6 +60,8 @@ Review mode follows WaniKani's rules:
   kun'yomi) asks again without a miss. A leading "the" or "a" is graded as
   typed, unlike practice cards.
 - A wrong answer counts as a miss, and that half of the item comes back later.
+  Practice-card extras don't apply: no near-miss second try, no **I made a
+  typo**, and no memory help.
 - When both halves are answered correctly, Moji Nook sends the review to
   WaniKani with its miss counts and shows the new SRS stage.
 - Just before sending, Moji Nook asks WaniKani whether that review is still
