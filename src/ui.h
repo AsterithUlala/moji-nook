@@ -5,6 +5,7 @@
 #include "feedback.h"
 #include "modes.h"
 #include "sync.h"
+#include "wanikani_reviews.h"
 #include "speech.h"
 #include "progression_popup.h"
 #include "quiet_hours.h"
@@ -63,6 +64,7 @@ public:
                  bool preferRecorded);
   void setProgressTile(const std::optional<ProgressTile> &tile);
   bool isEngaged() const { return engaged; }
+  void showReviewNote(const QString &text);
   Challenge challenge;
 signals:
   void completed(Challenge challenge, int outcome, qint64 activeMs);
@@ -103,7 +105,7 @@ private:
   bool typeBeforeReveal = true, missDetails = false;
   // Snapshot per card so a settings change cannot strand a shown card.
   bool attemptFirst = false;
-  QLabel *readingWarning;
+  QLabel *readingWarning, *reviewNote;
   AnkiDetails *ankiDetails;
   QPointer<JapaneseSpeech> speech;
   bool speechEnabled = false, speechAutoplay = true, preferRecording = false;
@@ -139,6 +141,7 @@ private:
   QString directory;
   QSettings settings;
   Sync sync;
+  WaniKaniReviews reviews;
   AnkiSource anki;
   AnkiPanel *ankiPanel;
   Picker picker;
@@ -181,6 +184,11 @@ private:
   QAction *snoozeAction = nullptr;
   QDateTime lastSyncAt, lastAutoAttempt;
   QLineEdit *tokenInput;
+  QCheckBox *reviewMode;
+  QLabel *reviewStatus, *accessNote;
+  bool reviewModeOn() const;
+  void applyReviewMode();
+  void connectReviews();
   QSpinBox *interval;
   QSpinBox *sessionCount;
   QSpinBox *snoozeLength;

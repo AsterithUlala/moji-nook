@@ -1,12 +1,12 @@
 pkgname=moji-nook
-_tag=0.1.2-alpha
-pkgver=0.1.2alpha
+_tag=0.2.0-alpha
+pkgver=0.2.0alpha
 pkgrel=1
 pkgdesc="A quiet WaniKani companion: short Japanese practice cards over your other windows"
 arch=('x86_64')
 url="https://github.com/AsterithUlala/moji-nook"
 license=('MIT' 'BSD-3-Clause' 'CC-BY-3.0' 'CC-BY-4.0' 'LicenseRef-VOICEVOX')
-depends=('qt6-base' 'qt6-multimedia' 'layer-shell-qt' 'hicolor-icon-theme' 'gcc-libs' 'glibc')
+depends=('qt6-base' 'qt6-multimedia' 'qt6-svg' 'layer-shell-qt' 'hicolor-icon-theme' 'gcc-libs' 'glibc')
 makedepends=('cmake' 'ninja' 'python')
 optdepends=('noto-fonts-cjk: recommended Japanese font'
             'noto-fonts: recommended interface font')

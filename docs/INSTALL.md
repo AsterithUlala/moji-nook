@@ -1,6 +1,6 @@
 # Install Moji Nook
 
-Moji Nook is an early alpha (0.1.2). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
+Moji Nook is an early alpha (0.2.0). The [releases page](https://github.com/AsterithUlala/moji-nook/releases)
 has an Arch package, an AppImage for other Linux distributions, and an
 experimental Windows zip. You can also build from source. Build commands below start from the repository
 directory after cloning.
@@ -70,6 +70,8 @@ build or overlay behavior and is a development target only.
 
 - Git, CMake **3.21+**, Ninja, and a C++17 compiler.
 - Qt **6.5+** with Widgets, Network, Sql (including the SQLite driver), Test, and Multimedia.
+- Qt SVG at run time. Review mode uses it to draw radicals that WaniKani only has
+  as an image.
 - LayerShellQt on Linux.
 - Python **3.12+** and network access for the initial speech-bundle preparation.
   Python is used at build time, not by the running app. The scripts require
@@ -81,7 +83,7 @@ build or overlay behavior and is a development target only.
 On Arch Linux or CachyOS:
 
 ```sh
-sudo pacman -S --needed git cmake ninja gcc python qt6-base qt6-multimedia layer-shell-qt
+sudo pacman -S --needed git cmake ninja gcc python qt6-base qt6-multimedia qt6-svg layer-shell-qt
 sudo pacman -S --needed noto-fonts noto-fonts-cjk
 ```
 

@@ -81,7 +81,9 @@ bool Store::record(const Challenge &c, std::optional<bool> correct,
             "created_at,local_day,event_json) VALUES(?,?,?,?,?,?,?,?,?)");
   q.addBindValue(c.subject.id);
   q.addBindValue(c.subject.characters);
-  q.addBindValue(modeName(c.mode));
+  const QString mode =
+      c.wanikaniReview ? QString("WaniKani review") : modeName(c.mode);
+  q.addBindValue(mode);
   q.addBindValue(c.reading ? "Reading" : "Meaning");
   q.addBindValue(correct ? QVariant(*correct ? 1 : 0) : QVariant());
   q.addBindValue(activeMs);
@@ -116,7 +118,7 @@ bool Store::record(const Challenge &c, std::optional<bool> correct,
   event["accepted_meanings"] = QJsonArray::fromStringList(c.subject.meanings);
   event["accepted_readings"] = QJsonArray::fromStringList(c.subject.readings);
   event["choices"] = QJsonArray::fromStringList(c.choices);
-  event["mode"] = modeName(c.mode);
+  event["mode"] = mode;
   event["dimension"] = c.reading ? "Reading" : "Meaning";
   event["grading"] = c.mode == Mode::Recall ? "self-rated" : "checked";
   event["outcome"] =

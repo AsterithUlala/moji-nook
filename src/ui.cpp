@@ -7,7 +7,7 @@
 App::App(Store &s, const QString &path, QObject *parent)
     : QObject(parent), store(s), progression(s.db), directory(path),
       settings(path + "/settings.ini", QSettings::IniFormat), sync(s, this),
-      anki(s, this) {
+      reviews(path, this), anki(s, this) {
   // Honor an existing explicit mute/volume preference when consolidating audio.
   if (!settings.contains("speech/enabled") && settings.contains("anki/audio_enabled"))
     settings.setValue("speech/enabled", settings.value("anki/audio_enabled"));
@@ -119,10 +119,18 @@ App::App(Store &s, const QString &path, QObject *parent)
     refreshHomeState();
   });
   clock.refreshQuiet();
+  // Recorded at grading, not on finish: a card can stay open until quit.
+  connect(&card, &Card::graded, this, [this](bool correct) {
+    reviews.answer(card.challenge, correct);
+  });
   connect(&card, &Card::completed, this,
           [this](Challenge c, int outcome, qint64 ms) {
             PerformanceSpan timing("complete-answer");
-            if (!store.record(c,
+            // Radicals have no reading and no practice tile; keep them out of
+            // local stats.
+            const bool recordLocally =
+                !(c.wanikaniReview && c.subject.kind == "radical");
+            if (recordLocally && !store.record(c,
                               outcome < 0 ? std::nullopt
                                           : std::optional<bool>(outcome == 1),
                               ms)) {
@@ -168,6 +176,7 @@ App::App(Store &s, const QString &path, QObject *parent)
             }
             invalidateStats();
           });
+  connectReviews();
   connect(&sync, &Sync::progress, status, &QLabel::setText);
   connect(&sync, &Sync::progress, this, [this](const QString &message) {
     setSourceStatus(connectionStatus, "connecting", message);
@@ -222,12 +231,82 @@ App::App(Store &s, const QString &path, QObject *parent)
   heartbeat.start(250);
   connect(&autoSync, &QTimer::timeout, this, [this] {
     syncIfDue();
+    if (reviewModeOn() && !reviews.refreshing() &&
+        reviewRefreshDue(reviews.lastAttempt(), QDateTime::currentDateTimeUtc()))
+      reviews.refresh(readToken());
     if (!demoMode)
       ankiPanel->syncIfDue();
     if (dashboard.isVisible())
       invalidateStats();
   });
   autoSync.start(60 * 1000);
+}
+bool App::reviewModeOn() const {
+  return !demoMode && settings.value("wanikani/reviewMode", false).toBool();
+}
+void App::applyReviewMode() {
+  const bool on = reviewModeOn();
+  accessNote->setText(
+      on ? "Reviews mode on · finished items are sent to WaniKani."
+         : "Read-only access · token and practice history stay local.");
+  reviewStatus->setVisible(on || !reviewStatus->text().isEmpty());
+}
+void App::connectReviews() {
+  connect(reviewMode, &QCheckBox::toggled, this, [this](bool on) {
+    reviewStatus->clear();
+    if (on) {
+      reviewStatus->setText("Checking token…");
+      reviewStatus->show();
+      reviews.checkAccess(readToken());
+      return;
+    }
+    settings.setValue("wanikani/reviewMode", false);
+    reviews.stop();
+    applyReviewMode();
+  });
+  connect(&reviews, &WaniKaniReviews::accessChecked, this,
+          [this](WaniKaniReviews::Access access, const QString &message) {
+            // Re-checking a newly saved token while offline keeps the mode;
+            // a rejected submission will still turn it off.
+            if (access == WaniKaniReviews::Access::Unreachable &&
+                reviewModeOn()) {
+              reviewStatus->setText(message);
+              reviews.refresh(readToken());
+              return;
+            }
+            if (access != WaniKaniReviews::Access::Allowed) {
+              const QSignalBlocker block(reviewMode);
+              reviewMode->setChecked(false);
+              settings.setValue("wanikani/reviewMode", false);
+              reviews.stop();
+              reviewStatus->setText(message);
+              applyReviewMode();
+              return;
+            }
+            settings.setValue("wanikani/reviewMode", true);
+            reviewStatus->setText("Token can submit reviews · loading reviews…");
+            applyReviewMode();
+            reviews.refresh(readToken());
+          });
+  connect(&reviews, &WaniKaniReviews::refreshed, this,
+          [this](bool ok, const QString &message) {
+            if (!reviewModeOn())
+              return;
+            reviewStatus->setText(ok && reviews.waiting()
+                                      ? "Token can submit reviews · " + message
+                                      : message);
+            if (ok && reviews.waiting() && !clock.pending &&
+                !clock.timer.isActive())
+              clock.request();
+          });
+  connect(&reviews, &WaniKaniReviews::submitted, this,
+          [this](const QString &message) {
+            status->setText("Review sent to WaniKani · " + message);
+            card.showReviewNote(message);
+            if (reviews.waiting())
+              reviewStatus->setText("Token can submit reviews · " +
+                                    reviews.waitingText());
+          });
 }
 QString App::readToken() const {
   QFile f(directory + "/token");
@@ -516,7 +595,8 @@ void App::showCard() {
   recap.dismiss();
   previewCard.hide(); // The real card takes the sample's place.
   PerformanceSpan timing("select-and-present-card");
-  if (pool.isEmpty()) {
+  const auto review = reviewModeOn() ? reviews.next() : std::nullopt;
+  if (pool.isEmpty() && !review) {
     // Keep the interval running so reminders resume once words arrive.
     clock.complete();
     card.hide();
@@ -533,34 +613,42 @@ void App::showCard() {
                    .toInt(),
                100) /
         10.0);
-  QVector<Subject> ankiPool, wkPool;
-  for (const auto &s : pool)
-    (s.source == "anki" ? ankiPool : wkPool).append(s);
   const int ankiShare =
       qBound(0, settings.value("anki/share", 30).toInt(), 100);
-  const bool useAnki = !ankiPool.isEmpty() &&
-                       (wkPool.isEmpty() ||
-                        QRandomGenerator::global()->bounded(100) < ankiShare);
-  auto evidence = store.evidence();
-  const auto ankiEvidence = anki.evidence(ankiPool);
-  for (auto it = ankiEvidence.begin(); it != ankiEvidence.end(); ++it) {
-    evidence[it.key()].recent += it->recent;
-    evidence[it.key()].persistent += it->persistent;
+  Challenge challenge;
+  if (review)
+    challenge = *review;
+  else {
+    QVector<Subject> ankiPool, wkPool;
+    for (const auto &s : pool)
+      (s.source == "anki" ? ankiPool : wkPool).append(s);
+    const bool useAnki = !ankiPool.isEmpty() &&
+                         (wkPool.isEmpty() ||
+                          QRandomGenerator::global()->bounded(100) < ankiShare);
+    const auto &source = useAnki ? ankiPool : wkPool;
+    auto evidence = store.evidence();
+    const auto ankiEvidence = anki.evidence(ankiPool);
+    for (auto it = ankiEvidence.begin(); it != ankiEvidence.end(); ++it) {
+      evidence[it.key()].recent += it->recent;
+      evidence[it.key()].persistent += it->persistent;
+    }
+    const auto now = QDateTime::currentDateTime();
+    graded += store.gradedAttempts(graded.isEmpty() ? QDateTime()
+                                                    : graded.last().at);
+    const auto memory =
+        estimateMemory(source, graded, now, QDate::currentDate());
+    const SelectionMix mix{newestPercent->value(),
+                           recentPercent->value(),
+                           persistentPercent->value(),
+                           burnedPercent->value(),
+                           recallPercent->value(),
+                           typedPercent->value(),
+                           weights};
+    challenge =
+        picker.next(source, store.recentSubjects(), evidence, memory, mix, now);
+    challenge.event["recall_estimate"] = recallProbability(
+        memory.value(skillKey(challenge.subject.id, challenge.reading)), now);
   }
-  const auto &source = useAnki ? ankiPool : wkPool;
-  const auto now = QDateTime::currentDateTime();
-  graded += store.gradedAttempts(graded.isEmpty() ? QDateTime()
-                                                  : graded.last().at);
-  const auto memory = estimateMemory(source, graded, now, QDate::currentDate());
-  const SelectionMix mix{newestPercent->value(),
-                         recentPercent->value(),
-                         persistentPercent->value(),
-                         burnedPercent->value(),
-                         recallPercent->value(),
-                         typedPercent->value(),
-                         weights};
-  auto challenge =
-      picker.next(source, store.recentSubjects(), evidence, memory, mix, now);
   challenge.event["session_id"] = clock.sessionId;
   challenge.event["session_position"] = clock.position;
   challenge.event["session_total"] = clock.sessionTotal;
@@ -577,8 +665,6 @@ void App::showCard() {
   challenge.event["newest_share"] = newestPercent->value();
   challenge.event["newest_count"] = 30;
   challenge.event["anki_share"] = ankiShare;
-  challenge.event["recall_estimate"] = recallProbability(
-      memory.value(skillKey(challenge.subject.id, challenge.reading)), now);
   challenge.event["picker_version"] = 5;
   challenge.event["demo"] = demoMode;
   challenge.event["transition_outcome"] = transitionOutcome;
@@ -630,6 +716,16 @@ void App::start(bool demo, bool trayOnly, const QStringList &loginArgs) {
                                        : "Your cached words are ready · practice stays local");
   if (!demo)
     QTimer::singleShot(200, this, &App::syncIfDue);
+  if (demo) {
+    const QSignalBlocker block(reviewMode);
+    reviewMode->setChecked(false);
+    reviewMode->setEnabled(false);
+  }
+  applyReviewMode();
+  if (reviewModeOn()) {
+    reviewStatus->setText("Loading WaniKani reviews…");
+    reviews.refresh(readToken());
+  }
   if (!demo)
     QTimer::singleShot(1000, ankiPanel, &AnkiPanel::syncIfDue);
 }

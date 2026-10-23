@@ -11,6 +11,9 @@ struct Subject {
   int id = 0, stage = 0, level = 0;
   QString kind, characters, url, contextJa, contextEn, readingKind;
   QStringList meanings, readings;
+  // WaniKani review grading: blacklisted meanings and unaccepted kanji
+  // readings.
+  QStringList blacklist, otherReadings;
   QList<int> components, similar;
   QDateTime startedAt, reviewedAt;
   int intervalHours = 0; // Source-reported review interval; 0 uses the stage.
@@ -45,6 +48,7 @@ struct Challenge {
   QStringList choices;
   QString selectionReason = "Broad recall";
   QJsonObject event;
+  bool wanikaniReview = false;
   QString answer() const {
     return reading ? subject.readings.join(" / ")
                    : subject.meanings.join(" / ");

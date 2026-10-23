@@ -180,8 +180,10 @@ QString appStyle(int theme) {
     QLabel#wordKind[subjectKind="kanji"] { color:%1; }
     QLabel#wordKind[subjectKind="vocabulary"],
     QLabel#wordKind[subjectKind="kana_vocabulary"] { color:%2; }
+    QLabel#wordKind[subjectKind="radical"] { color:%3; }
   )").arg(wanikaniSubjectInk("kanji", theme).name(),
-          wanikaniSubjectInk("vocabulary", theme).name());
+          wanikaniSubjectInk("vocabulary", theme).name(),
+          wanikaniSubjectInk("radical", theme).name());
   css += QString(R"(
     QWidget#studioHeader { background:$rail; border:0; border-bottom:1px solid $border; }
     QWidget#studioHeader QLabel { background:transparent; color:$text; }
@@ -226,6 +228,8 @@ QString appStyle(int theme) {
     QLabel#connectionStatus[status="connected"], QLabel#ankiStatus[status="connected"] { color:$accent; }
     QLabel#connectionStatus[status="connecting"], QLabel#ankiStatus[status="connecting"] { color:$warm; }
     QLabel#connectionStatus[status="error"], QLabel#ankiStatus[status="error"] { color:$negative; }
+    QWidget#settingsBody QLabel#wanikaniReviewStatus { color:$muted; font-size:13px; }
+    QLabel#wanikaniReviewNote { color:$muted; font-size:12px; }
     QPushButton[role="section"] { border:0; border-right:1px solid $border; border-bottom:2px solid transparent; background:transparent; color:$muted; border-radius:0; padding:11px 14px; }
     QPushButton[role="section"][lastSection="true"] { border-right:0; }
     QPushButton[role="section"]:hover { background:$surface; color:$text; }

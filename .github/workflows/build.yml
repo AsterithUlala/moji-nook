@@ -21,7 +21,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm --needed base-devel git cmake ninja python \
-            qt6-base qt6-multimedia layer-shell-qt hicolor-icon-theme
+            qt6-base qt6-multimedia qt6-svg layer-shell-qt hicolor-icon-theme
       - uses: actions/checkout@v4
       - name: Build package
         run: |
